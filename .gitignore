@@ -1,0 +1,42 @@
+﻿# ==========================================
+# 1. Python Cache & Compiled Files (File rác Python)
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ==========================================
+# 2. Virtual Environments (Môi trường ảo)
+# ==========================================
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# ==========================================
+# 3. Environment variables & Secrets (Tài khoản/Mật khẩu DB)
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ==========================================
+# 4. IDEs Config (Cấu hình PyCharm / VS Code)
+# ==========================================
+.idea/
+.vscode/
+*.swp
+
+# ==========================================
+# 5. Logs & Temporary Files
+# ==========================================
+*.log
+*.sqlite3
+*.db
+.DS_Store
+Thumbs.db

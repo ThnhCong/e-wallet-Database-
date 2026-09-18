@@ -1,0 +1,29 @@
+INSERT INTO users (
+    user_name,
+    password_hash,
+    email,
+    phone,
+    status
+)
+VALUES
+(
+    'alice',
+    '$2b$10$N2DyKMb/KcPvRmB9mc2O9.389rT9MojlLaQUFYA7rrVysHwqPMDEi',
+    'alice@example.com',
+    '0900000001',
+    'ACTIVE'
+),
+(
+    'bob',
+    '$2b$10$N2DyKMb/KcPvRmB9mc2O9.389rT9MojlLaQUFYA7rrVysHwqPMDEi',
+    'bob@example.com',
+    '0900000002',
+    'ACTIVE'
+),
+(
+    'charlie',
+    '$2b$10$N2DyKMb/KcPvRmB9mc2O9.389rT9MojlLaQUFA7rrVysHwqPMDEi',
+    'charlie@example.com',
+    '0900000003',
+    'ACTIVE'
+);
