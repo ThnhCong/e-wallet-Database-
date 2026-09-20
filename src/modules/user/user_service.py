@@ -1,5 +1,6 @@
 # src/modules/user/user_service.py
 import hashlib
+import re
 
 
 class UserService:
@@ -21,9 +22,27 @@ class UserService:
 
         password_hash = self._hash_password(password)
 
+        """Check email format, email must have a format like ...@....com"""
+        if not re.match(r"^[^@\s]+@[^@\s]+\.com$", email):
+            raise ValueError("Email must be like: sth@sth.com")
+
         return self.user_repo.register(
             user_name,
             password_hash,
             email,
             phone
         )
+
+    def login(self, phone_input, password_input):
+        password_hash = self._hash_password(password_input)
+
+        if self.user_repo.login(phone_input, password_hash):
+            print("Login successfully")
+            return True
+
+        else:
+            print("Your phone or your password is wrong!")
+            return False
+
+    def view_user_by_id(self, user_id):
+        return self.user_repo.view_user_by_id(user_id)

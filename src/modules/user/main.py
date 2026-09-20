@@ -16,10 +16,12 @@ def main():
 
     while True:
         print("\n1. Register")
-        print("2. Deposit")
-        print("3. Withdraw")
-        print("4. Transfer")
-        print("5. View Wallet")
+        print("2. Login")
+        print("3. Deposit")
+        print("4. Withdraw")
+        print("5. Transfer")
+        print("6. View Wallet")
+        print("7. View User")
         print("0. Exit")
 
         choice = input("Choose: ").strip()
@@ -28,7 +30,7 @@ def main():
             print("Goodbye!")
             break
 
-        if choice not in ["1", "2", "3", "4", "5"]:
+        if choice not in ["1", "2", "3", "4", "5", "6", "7"]:
             print("Invalid choice.")
             continue
 
@@ -55,6 +57,26 @@ def main():
                 print(f"User ID: {result}")
 
             elif choice == "2":
+                try:
+
+                    wrong_time = 0
+                    while wrong_time < 3:
+
+                        phone_input = input("Enter your phone").strip()
+                        password_input = input("Enter your password").strip()
+
+                        if user_controller.login(phone_input, password_input):
+                            break
+                        else:
+                            wrong_time += 1
+
+                    if wrong_time == 3:
+                        print("Waiting 1 minute to login again!")
+
+                except ValueError as e:
+                    print(f"\n{e}")
+
+            elif choice == "3":
                 user_id = int(input("Enter user ID: "))
                 amount = input("Enter deposit amount: ")
 
@@ -62,7 +84,7 @@ def main():
                 print("\nDeposit successful!")
                 print(result)
 
-            elif choice == "3":
+            elif choice == "4":
                 user_id = int(input("Enter user ID: "))
                 amount = input("Enter withdrawal amount: ")
 
@@ -70,7 +92,7 @@ def main():
                 print("\nWithdrawal successful!")
                 print(result)
 
-            elif choice == "4":
+            elif choice == "5":
                 sender_id = int(input("Enter sender user ID: "))
                 receiver_id = int(input("Enter receiver user ID: "))
                 amount = input("Enter transfer amount: ")
@@ -79,7 +101,7 @@ def main():
                 print("\nTransfer successful!")
                 print(result)
 
-            elif choice == "5":
+            elif choice == "6":
                 wallet_id = int(input("Enter wallet ID: "))
                 wallet_info = wallet_controller.get_wallet_by_id(wallet_id)
 
@@ -96,6 +118,26 @@ def main():
                     print("================================")
                 else:
                     print("\nWallet not found!")
+
+            elif choice == "7":
+                user_id = int(input("Enter user ID: "))
+                user_info = user_controller.get_user_by_id(user_id)
+
+                if user_info:
+                    print("\n================================")
+                    print("        USER INFORMATION        ")
+                    print("================================")
+                    print(f"User ID   : {user_info.get('user_id')}")
+                    print(f"Username  : {user_info.get('user_name')}")
+                    print(f"Email     : {user_info.get('email')}")
+                    print(f"Phone     : {user_info.get('phone')}")
+                    print(f"Status    : {user_info.get('status')}")
+                    print("================================")
+                else:
+                    print("\nUser not found!")
+
+        except ValueError as e:
+            print(f"\n{e}")
 
         except Exception as e:
             print("\nOperation failed!")

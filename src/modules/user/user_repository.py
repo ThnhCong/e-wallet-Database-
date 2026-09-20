@@ -1,3 +1,5 @@
+import pymysql
+
 class UserRepository:
 
     def __init__(self, db_connection):
@@ -50,8 +52,77 @@ class UserRepository:
 
             return user_id
 
+        except pymysql.err.IntegrityError as e:
+            self.conn.rollback()
+
+            error_code = e.args[0]
+            error_message = str(e)
+
+            if error_code == 1062:
+                if "uq_users_email" in error_message:
+                    raise ValueError("Error: Email has been exist!")
+                if "uq_users_phone" in error_message:
+                    raise ValueError("Error: Phone number has been exist")
+
+            raise
+
         except Exception:
             # Nếu một bước lỗi -> rollback toàn bộ
+            self.conn.rollback()
+            raise
+
+        finally:
+            cursor.close()
+
+    def login(self, phone_input, password_hash_input):
+        cursor = self.conn.cursor()
+
+        try:
+            query = """
+                SELECT password_hash 
+                FROM users 
+                WHERE phone = %s 
+                LIMIT 1
+            """
+            cursor.execute(query, (phone_input,))
+            result = cursor.fetchone()
+
+            #User is not exist
+            if result is None:
+                return False
+
+            # result is a tuple (password_hash,)
+            db_password_hash = result['password_hash']
+
+            # Compare password hash
+            return password_hash_input == db_password_hash
+
+        except Exception as e:
+            self.conn.rollback()
+            raise
+
+        finally:
+            cursor.close()
+    def view_user_by_id(self, user_id):
+        cursor = self.conn.cursor()
+
+        try:
+            query = """
+                    SELECT *
+                    FROM users
+                    WHERE user_id = %s
+                    LIMIT 1
+                    """
+
+            cursor.execute(query, (user_id,))
+            user = cursor.fetchone()
+
+            if not user: #User is not exist!
+                return False
+
+            return user
+
+        except Exception as e:
             self.conn.rollback()
             raise
 
