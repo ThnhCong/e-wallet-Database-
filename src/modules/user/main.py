@@ -22,6 +22,7 @@ def main():
         print("5. Transfer")
         print("6. View Wallet")
         print("7. View User")
+        print("8. Register wallet")
         print("0. Exit")
 
         choice = input("Choose: ").strip()
@@ -30,7 +31,7 @@ def main():
             print("Goodbye!")
             break
 
-        if choice not in ["1", "2", "3", "4", "5", "6", "7"]:
+        if choice not in ["1", "2", "3", "4", "5", "6", "7", "8"]:
             print("Invalid choice.")
             continue
 
@@ -77,18 +78,18 @@ def main():
                     print(f"\n{e}")
 
             elif choice == "3":
-                user_id = int(input("Enter user ID: "))
+                wallet_id = int(input("Enter wallet ID: "))
                 amount = input("Enter deposit amount: ")
 
-                result = wallet_controller.deposit(user_id, amount)
+                result = wallet_controller.deposit(wallet_id, amount)
                 print("\nDeposit successful!")
                 print(result)
 
             elif choice == "4":
-                user_id = int(input("Enter user ID: "))
+                wallet_id = int(input("Enter wallet ID: "))
                 amount = input("Enter withdrawal amount: ")
 
-                result = wallet_controller.withdraw(user_id, amount)
+                result = wallet_controller.withdraw(wallet_id, amount)
                 print("\nWithdrawal successful!")
                 print(result)
 
@@ -114,7 +115,8 @@ def main():
                     print(f"Owner Name  : {wallet_info.get('user_name')}")
                     print(f"Balance     : {wallet_info.get('balance')} {wallet_info.get('currency')}")
                     print(f"Weekly Limit: {wallet_info.get('limit_week')} {wallet_info.get('currency')}")
-                    print(f"User Status : {wallet_info.get('user_status')}")
+                    print(f"Status : {wallet_info.get('status')}")
+                    print(f"Create at: {wallet_info.get('create_at')}")
                     print("================================")
                 else:
                     print("\nWallet not found!")
@@ -131,10 +133,15 @@ def main():
                     print(f"Username  : {user_info.get('user_name')}")
                     print(f"Email     : {user_info.get('email')}")
                     print(f"Phone     : {user_info.get('phone')}")
-                    print(f"Status    : {user_info.get('status')}")
                     print("================================")
                 else:
                     print("\nUser not found!")
+
+            elif choice == "8":
+                user_id_for_wallet = int(input("Enter user_id: "))
+                currency = input("Enter currency: ").strip()
+                wallet_controller.create_wallet(user_id_for_wallet, currency)
+                print("\nCreate wallet successful!")
 
         except ValueError as e:
             print(f"\n{e}")
@@ -146,7 +153,6 @@ def main():
         finally:
             # Đảm bảo connection luôn được trả về pool sau mỗi lệnh
             db_conn.close()
-
 
 if __name__ == "__main__":
     main()

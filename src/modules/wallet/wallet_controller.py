@@ -3,6 +3,9 @@ class WalletController:
     def __init__(self, wallet_service):
         self.wallet_service = wallet_service
 
+    def create_wallet(self, user_id, currency):
+        return self.wallet_service.create_wallet(user_id, currency)
+
     def deposit(self, user_id, amount):
         return self.wallet_service.deposit(user_id, amount)
 

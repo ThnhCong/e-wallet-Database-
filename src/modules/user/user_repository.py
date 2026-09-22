@@ -11,8 +11,8 @@ class UserRepository:
         try:
             # 1. INSERT users
             insert_user_query = """
-                INSERT INTO users (user_name, password_hash, email, phone, status)
-                VALUES (%s, %s, %s, %s, 'ACTIVE')
+                INSERT INTO users (user_name, password_hash, email, phone)
+                VALUES (%s, %s, %s, %s)
             """
 
             cursor.execute(
@@ -22,29 +22,16 @@ class UserRepository:
 
             user_id = cursor.lastrowid
 
-            # 2. INSERT wallets
-            insert_wallet_query = """
-                INSERT INTO wallets (user_id, balance, currency, limit_week)
-                VALUES (%s, 0.00, 'VND', 10000000.00)
-            """
-
-            cursor.execute(
-                insert_wallet_query,
-                (user_id,)
-            )
-
-            wallet_id = cursor.lastrowid
-
             # 3. INSERT audit_logs
             insert_audit_query = """
                 INSERT INTO audit_logs
-                (transaction_id, wallet_id, user_id, action)
-                VALUES (NULL, %s, %s, 'REGISTER')
+                (user_id, wallet_id, transaction_id, action)
+                VALUES (%s, NULL, NULL, 'REGISTER')
             """
 
             cursor.execute(
                 insert_audit_query,
-                (wallet_id, user_id)
+                (user_id,)
             )
 
             # Commit cả 3 INSERT

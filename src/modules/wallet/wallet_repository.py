@@ -6,35 +6,64 @@ class WalletRepository:
     def __init__(self, db_connection):
         self.conn = db_connection
 
-    # =========================================================
-    # GET WALLET
-    # =========================================================
-
-    def get_wallet_by_user_id_for_update(self, user_id):
+    def user_exist(self, user_id):
         cursor = self.conn.cursor()
 
         try:
             query = """
-                SELECT
-                    w.wallet_id,
-                    w.user_id,
-                    w.balance,
-                    w.currency,
-                    w.limit_week,
-                    u.user_name,
-                    u.status AS user_status
-                FROM wallets w
-                INNER JOIN users u
-                    ON w.user_id = u.user_id
-                WHERE w.user_id = %s
-                FOR UPDATE
-            """
+                    SELECT 1 
+                    FROM users
+                    where user_id = %s
+                    LIMIT 1
+                    """
 
             cursor.execute(query, (user_id,))
-            return cursor.fetchone()
+            return cursor.fetchone() is not None
+
+        except Exception as e:
+            self.conn.rollback()
+            raise
 
         finally:
             cursor.close()
+
+    #DELETE     get_wallet_by_user_id_for_update(self, user_id)
+
+    def create_wallet(self, user_id, currency):
+        cursor = self.conn.cursor()
+
+        try:
+            insert_wallet_query = """
+                    INSERT INTO wallets 
+                    (user_id, balance, currency, limit_week, status)
+                    VALUE (%s, 0.00, %s, 10000000, 'ACTIVE')
+                    """
+
+            cursor.execute(insert_wallet_query, (user_id, currency))
+            wallet_id = cursor.lastrowid
+
+            insert_audit_query = """
+                                INSERT INTO audit_logs
+                                (user_id, wallet_id, transaction_id, action)
+                                VALUES (%s, %s, NULL, 'CREATE_WALLET')
+                                """
+
+            cursor.execute(insert_audit_query, (user_id, wallet_id))
+            new_wallet = cursor.fetchone()
+
+            self.conn.commit()
+            return wallet_id
+
+        except Exception as e:
+            self.conn.rollback()
+            raise
+
+        finally:
+            self.conn.close()
+
+    # =========================================================
+    # GET WALLET
+    # =========================================================
 
     def get_wallet_by_id(self, wallet_id):
         cursor = self.conn.cursor()
@@ -47,8 +76,8 @@ class WalletRepository:
                     w.balance,
                     w.currency,
                     w.limit_week,
-                    u.user_name,
-                    u.status AS user_status
+                    w.status,
+                    u.user_name                    
                 FROM wallets w
                 INNER JOIN users u
                     ON w.user_id = u.user_id
@@ -57,6 +86,47 @@ class WalletRepository:
 
             cursor.execute(query, (wallet_id,))
             return cursor.fetchone()
+
+        finally:
+            cursor.close()
+
+    #==========================================================
+    # CHECK WHETHER 2 WALLETS ARE THE SAME CURRENCY
+    # ==========================================================
+
+    def are_the_same_currency(self, sender_id, receiver_id):
+        cursor = self.conn.cursor()
+
+        try:
+            find_currency_sender = """
+                                    SELECT *
+                                    FROM wallets
+                                    WHERE wallet_id = %s
+                                    LIMIT 1
+                                    """
+            find_currency_receiver = """
+                                    SELECT *
+                                    FROM wallets
+                                    WHERE wallet_id = %s
+                                    LIMIT 1
+                                    """
+
+            # Find currency of sender
+            cursor.execute(find_currency_sender, (sender_id,))
+            sender = cursor.fetchone()
+
+            # Find currency of receiver
+            cursor.execute(find_currency_receiver, (receiver_id,))
+            receiver = cursor.fetchone()
+
+            if sender['currency'] == receiver['currency']:
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            self.conn.rollback()
+            raise
 
         finally:
             cursor.close()
@@ -333,8 +403,8 @@ class WalletRepository:
                     w.balance,
                     w.currency,
                     w.limit_week,
-                    u.user_name,
-                    u.status AS user_status
+                    w.status,
+                    u.user_name
                 FROM wallets w
                 INNER JOIN users u
                     ON w.user_id = u.user_id

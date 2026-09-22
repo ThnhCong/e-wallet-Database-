@@ -5,10 +5,15 @@ USE ewallet;
 -- Additional indexes for frequently queried columns
 -- =========================================================
 
--- USERS
-CREATE INDEX idx_users_status
-    ON users(status);
-
+-- WALLETS
+CREATE INDEX idx_wallets_status
+    ON wallets(status);
+    
+CREATE INDEX idx_wallets_user_id 
+    ON wallets(user_id);
+    
+CREATE INDEX idx_wallets_currency
+	ON wallets(currency);
 
 -- TRANSACTIONS
 CREATE INDEX idx_transactions_sender_id
@@ -25,18 +30,6 @@ CREATE INDEX idx_transactions_status
 
 CREATE INDEX idx_transactions_created_at
     ON transactions(created_at);
-
-
--- LEDGERS
-CREATE INDEX idx_ledgers_wallet_id
-    ON ledgers(wallet_id);
-
-CREATE INDEX idx_ledgers_transaction_id
-    ON ledgers(transaction_id);
-
-CREATE INDEX idx_ledgers_created_at
-    ON ledgers(created_at);
-
 
 -- AUDIT LOGS
 CREATE INDEX idx_audit_logs_user_id
