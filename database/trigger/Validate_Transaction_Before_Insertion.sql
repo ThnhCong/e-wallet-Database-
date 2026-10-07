@@ -12,6 +12,12 @@ BEGIN
     DECLARE v_s_remain   DECIMAL(15, 2);
     DECLARE v_r_status   VARCHAR(10);
     DECLARE v_r_currency VARCHAR(3);
+    DECLARE v_not_found  TINYINT DEFAULT 0;
+
+    -- SELECT ... INTO khong co dong nao (vi khong ton tai) se sinh canh bao 1329 / SQLSTATE 02000.
+    -- Mot so client (PyMySQL, Workbench...) hien canh bao do nhu LOI HE THONG va che mat thong bao
+    -- that cua trigger. Handler nay nuot canh bao, de trigger tu SIGNAL dung thong bao.
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_not_found = 1;
 
     -- amount must be greater than 0
     IF NEW.amount IS NULL OR NEW.amount <= 0 THEN
@@ -99,3 +105,4 @@ BEGIN
         END IF;
     END IF;
 END$$
+DELIMITER ;

@@ -88,3 +88,4 @@ BEGIN
         SET @allow_balance_update = 0;
     END IF;
 END$$
+DELIMITER ;

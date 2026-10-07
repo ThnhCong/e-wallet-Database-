@@ -1,418 +1,87 @@
-import pymysql
+# src/modules/wallet/wallet_repository.py
+"""Chi chua SQL. KHONG co cau lenh nao sua balance / remain_limit_week / limit_week:
+viec do la cua trigger khi giao dich chuyen PENDING -> SUCCESS."""
+from src.common.db import BaseRepository
 
 
-class WalletRepository:
+class WalletRepository(BaseRepository):
 
-    def __init__(self, db_connection):
-        self.conn = db_connection
-
-    def user_exist(self, user_id):
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                    SELECT 1 
-                    FROM users
-                    where user_id = %s
-                    LIMIT 1
-                    """
-
-            cursor.execute(query, (user_id,))
-            return cursor.fetchone() is not None
-
-        except Exception as e:
-            self.conn.rollback()
-            raise
-
-        finally:
-            cursor.close()
-
-    #DELETE     get_wallet_by_user_id_for_update(self, user_id)
-
+    # ---------------- wallets
     def create_wallet(self, user_id, currency):
-        cursor = self.conn.cursor()
-
-        try:
-            insert_wallet_query = """
-                    INSERT INTO wallets 
-                    (user_id, balance, currency, limit_week, status)
-                    VALUE (%s, 0.00, %s, 10000000, 'ACTIVE')
-                    """
-
-            cursor.execute(insert_wallet_query, (user_id, currency))
-            wallet_id = cursor.lastrowid
-
-            insert_audit_query = """
-                                INSERT INTO audit_logs
-                                (user_id, wallet_id, transaction_id, action)
-                                VALUES (%s, %s, NULL, 'CREATE_WALLET')
-                                """
-
-            cursor.execute(insert_audit_query, (user_id, wallet_id))
-            new_wallet = cursor.fetchone()
-
-            self.conn.commit()
-            return wallet_id
-
-        except Exception as e:
-            self.conn.rollback()
-            raise
-
-        finally:
-            self.conn.close()
-
-    # =========================================================
-    # GET WALLET
-    # =========================================================
+        with self.cursor() as cur:
+            # chi truyen (user_id, currency): balance=0, status=ACTIVE la DEFAULT; limit_week / remain_limit_week
+            # do trigger trg_wallets_before_insert dat theo currency
+            cur.execute("INSERT INTO wallets (user_id, currency) VALUES (%s,%s)", (user_id, currency))
+            return cur.lastrowid
 
     def get_wallet_by_id(self, wallet_id):
-        cursor = self.conn.cursor()
+        with self.cursor() as cur:
+            cur.execute("SELECT w.wallet_id, w.user_id, u.user_name, w.balance, w.currency, w.limit_week, "
+                        "w.remain_limit_week, w.status, w.created_at "
+                        "FROM wallets w INNER JOIN users u ON u.user_id = w.user_id WHERE w.wallet_id=%s",
+                        (wallet_id,))
+            return cur.fetchone()
 
-        try:
-            query = """
-                SELECT
-                    w.wallet_id,
-                    w.user_id,
-                    w.balance,
-                    w.currency,
-                    w.limit_week,
-                    w.status,
-                    u.user_name                    
-                FROM wallets w
-                INNER JOIN users u
-                    ON w.user_id = u.user_id
-                WHERE w.wallet_id = %s
-            """
+    def list_wallets_by_user(self, user_id):
+        with self.cursor() as cur:
+            cur.execute("SELECT wallet_id, balance, currency, limit_week, remain_limit_week, status, created_at "
+                        "FROM wallets WHERE user_id=%s ORDER BY wallet_id", (user_id,))
+            return cur.fetchall()
 
-            cursor.execute(query, (wallet_id,))
-            return cursor.fetchone()
+    def lock_wallets(self, *wallet_ids):
+        """SELECT ... FOR UPDATE theo thu tu wallet_id TANG DAN (chong deadlock). Tra ve {wallet_id: row}."""
+        ids = sorted({i for i in wallet_ids if i is not None})
+        placeholders = ",".join(["%s"] * len(ids))
+        with self.cursor() as cur:
+            cur.execute(f"SELECT wallet_id, user_id, status, currency FROM wallets "
+                        f"WHERE wallet_id IN ({placeholders}) ORDER BY wallet_id FOR UPDATE", ids)
+            return {r["wallet_id"]: r for r in cur.fetchall()}
 
-        finally:
-            cursor.close()
+    def set_wallet_status(self, wallet_id, status):
+        with self.cursor() as cur:
+            cur.execute("UPDATE wallets SET status=%s WHERE wallet_id=%s", (status, wallet_id))
 
-    #==========================================================
-    # CHECK WHETHER 2 WALLETS ARE THE SAME CURRENCY
-    # ==========================================================
-
-    def are_the_same_currency(self, sender_id, receiver_id):
-        cursor = self.conn.cursor()
-
-        try:
-            find_currency_sender = """
-                                    SELECT *
-                                    FROM wallets
-                                    WHERE wallet_id = %s
-                                    LIMIT 1
-                                    """
-            find_currency_receiver = """
-                                    SELECT *
-                                    FROM wallets
-                                    WHERE wallet_id = %s
-                                    LIMIT 1
-                                    """
-
-            # Find currency of sender
-            cursor.execute(find_currency_sender, (sender_id,))
-            sender = cursor.fetchone()
-
-            # Find currency of receiver
-            cursor.execute(find_currency_receiver, (receiver_id,))
-            receiver = cursor.fetchone()
-
-            if sender['currency'] == receiver['currency']:
-                return True
-            else:
-                return False
-
-        except Exception as e:
-            self.conn.rollback()
-            raise
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # CREATE TRANSACTION
-    # =========================================================
-
-    def create_transaction(
-        self,
-        sender_id,
-        receiver_id,
-        transaction_type,
-        amount
-    ):
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                INSERT INTO transactions
-                (
-                    sender_id,
-                    receiver_id,
-                    type,
-                    amount,
-                    status
-                )
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    'PENDING'
-                )
-            """
-
-            cursor.execute(
-                query,
-                (
-                    sender_id,
-                    receiver_id,
-                    transaction_type,
-                    amount
-                )
-            )
-
-            return cursor.lastrowid
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # CREATE LEDGER
-    # =========================================================
-
-    def create_ledger(
-        self,
-        wallet_id,
-        transaction_id,
-        ledger_type,
-        amount
-    ):
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                INSERT INTO ledgers
-                (
-                    wallet_id,
-                    transaction_id,
-                    type,
-                    amount
-                )
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s,
-                    %s
-                )
-            """
-
-            cursor.execute(
-                query,
-                (
-                    wallet_id,
-                    transaction_id,
-                    ledger_type,
-                    amount
-                )
-            )
-
-            return cursor.lastrowid
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # UPDATE BALANCE
-    # =========================================================
-
-    def increase_balance(self, wallet_id, amount):
-
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                UPDATE wallets
-                SET balance = balance + %s
-                WHERE wallet_id = %s
-            """
-
-            cursor.execute(
-                query,
-                (
-                    amount,
-                    wallet_id
-                )
-            )
-
-        finally:
-            cursor.close()
-
-    def decrease_balance(self, wallet_id, amount):
-
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                UPDATE wallets
-                SET balance = balance - %s
-                WHERE wallet_id = %s
-                  AND balance >= %s
-            """
-
-            cursor.execute(
-                query,
-                (
-                    amount,
-                    wallet_id,
-                    amount
-                )
-            )
-
-            if cursor.rowcount != 1:
-                raise ValueError("Insufficient balance.")
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # UPDATE WEEKLY LIMIT
-    # =========================================================
-
-    def decrease_weekly_limit(self, wallet_id, amount):
-
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                UPDATE wallets
-                SET limit_week = limit_week - %s
-                WHERE wallet_id = %s
-                  AND limit_week >= %s
-            """
-
-            cursor.execute(
-                query,
-                (
-                    amount,
-                    wallet_id,
-                    amount
-                )
-            )
-
-            if cursor.rowcount != 1:
-                raise ValueError(
-                    "Transfer amount exceeds weekly limit."
-                )
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # TRANSACTION SUCCESS
-    # =========================================================
+    # ---------------- transactions
+    def create_transaction(self, sender_id, receiver_id, transaction_type, amount):
+        """INSERT luon la PENDING (DEFAULT); trigger BEFORE INSERT kiem tra toan bo luat."""
+        with self.cursor() as cur:
+            cur.execute("INSERT INTO transactions (sender_id, receiver_id, type, amount) VALUES (%s,%s,%s,%s)",
+                        (sender_id, receiver_id, transaction_type, amount))
+            return cur.lastrowid
 
     def mark_transaction_success(self, transaction_id):
+        """PENDING -> SUCCESS: trigger AFTER UPDATE kiem tra lai va cap nhat balance + remain_limit_week."""
+        with self.cursor() as cur:
+            cur.execute("UPDATE transactions SET status='SUCCESS' WHERE transaction_id=%s AND status='PENDING'",
+                        (transaction_id,))
+            if cur.rowcount != 1:
+                raise RuntimeError("Cannot update transaction status.")
 
-        cursor = self.conn.cursor()
+    def list_transactions(self, user_id, tx_type=None, status=None, limit=20):
+        sql = ("SELECT t.transaction_id, t.type, t.amount, t.status, t.sender_id, t.receiver_id, t.created_at "
+               "FROM transactions t "
+               "LEFT JOIN wallets s ON s.wallet_id = t.sender_id "
+               "LEFT JOIN wallets r ON r.wallet_id = t.receiver_id "
+               "WHERE (s.user_id=%s OR r.user_id=%s)")
+        params = [user_id, user_id]
+        if tx_type:
+            sql += " AND t.type=%s"
+            params.append(tx_type)
+        if status:
+            sql += " AND t.status=%s"
+            params.append(status)
+        sql += " ORDER BY t.created_at DESC, t.transaction_id DESC LIMIT %s"
+        params.append(limit)
+        with self.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
 
-        try:
-            query = """
-                UPDATE transactions
-                SET status = 'SUCCESS'
-                WHERE transaction_id = %s
-                  AND status = 'PENDING'
-            """
-
-            cursor.execute(
-                query,
-                (transaction_id,)
-            )
-
-            if cursor.rowcount != 1:
-                raise RuntimeError(
-                    "Cannot update transaction status."
-                )
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # AUDIT LOG
-    # =========================================================
-
-    def create_audit_log(
-        self,
-        user_id,
-        wallet_id,
-        transaction_id,
-        action
-    ):
-
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                INSERT INTO audit_logs
-                (
-                    transaction_id,
-                    wallet_id,
-                    user_id,
-                    action
-                )
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s,
-                    %s
-                )
-            """
-
-            cursor.execute(
-                query,
-                (
-                    transaction_id,
-                    wallet_id,
-                    user_id,
-                    action
-                )
-            )
-
-            return cursor.lastrowid
-
-        finally:
-            cursor.close()
-
-    # =========================================================
-    # GET WALLET AFTER TRANSACTION
-    # =========================================================
-
-    def get_wallet(self, user_id):
-
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                SELECT
-                    w.wallet_id,
-                    w.user_id,
-                    w.balance,
-                    w.currency,
-                    w.limit_week,
-                    w.status,
-                    u.user_name
-                FROM wallets w
-                INNER JOIN users u
-                    ON w.user_id = u.user_id
-                WHERE w.user_id = %s
-            """
-
-            cursor.execute(query, (user_id,))
-            return cursor.fetchone()
-
-        finally:
-            cursor.close()
+    def get_transaction(self, transaction_id):
+        with self.cursor() as cur:
+            cur.execute("SELECT t.transaction_id, t.type, t.amount, t.status, t.sender_id, t.receiver_id, "
+                        "t.created_at, s.user_id AS sender_user_id, r.user_id AS receiver_user_id "
+                        "FROM transactions t "
+                        "LEFT JOIN wallets s ON s.wallet_id = t.sender_id "
+                        "LEFT JOIN wallets r ON r.wallet_id = t.receiver_id "
+                        "WHERE t.transaction_id=%s", (transaction_id,))
+            return cur.fetchone()

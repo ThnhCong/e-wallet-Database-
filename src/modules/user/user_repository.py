@@ -1,117 +1,37 @@
-import pymysql
+# src/modules/user/user_repository.py
+from src.common.db import BaseRepository
 
-class UserRepository:
 
-    def __init__(self, db_connection):
-        self.conn = db_connection
+class UserRepository(BaseRepository):
 
-    def register(self, user_name, password_hash, email, phone):
-        cursor = self.conn.cursor()
+    def create_user(self, user_name, password_hash, email, phone):
+        with self.cursor() as cur:
+            cur.execute("INSERT INTO users (user_name, password_hash, email, phone) VALUES (%s,%s,%s,%s)",
+                        (user_name, password_hash, email, phone))
+            return cur.lastrowid
 
-        try:
-            # 1. INSERT users
-            insert_user_query = """
-                INSERT INTO users (user_name, password_hash, email, phone)
-                VALUES (%s, %s, %s, %s)
-            """
+    def get_user_by_phone(self, phone):
+        with self.cursor() as cur:
+            cur.execute("SELECT user_id, user_name, password_hash, email, phone FROM users WHERE phone=%s LIMIT 1",
+                        (phone,))
+            return cur.fetchone()
 
-            cursor.execute(
-                insert_user_query,
-                (user_name, password_hash, email, phone)
-            )
+    def get_user_with_hash(self, user_id):
+        with self.cursor() as cur:
+            cur.execute("SELECT user_id, user_name, password_hash, email, phone FROM users WHERE user_id=%s",
+                        (user_id,))
+            return cur.fetchone()
 
-            user_id = cursor.lastrowid
-
-            # 3. INSERT audit_logs
-            insert_audit_query = """
-                INSERT INTO audit_logs
-                (user_id, wallet_id, transaction_id, action)
-                VALUES (%s, NULL, NULL, 'REGISTER')
-            """
-
-            cursor.execute(
-                insert_audit_query,
-                (user_id,)
-            )
-
-            # Commit cả 3 INSERT
-            self.conn.commit()
-
-            return user_id
-
-        except pymysql.err.IntegrityError as e:
-            self.conn.rollback()
-
-            error_code = e.args[0]
-            error_message = str(e)
-
-            if error_code == 1062:
-                if "uq_users_email" in error_message:
-                    raise ValueError("Error: Email has been exist!")
-                if "uq_users_phone" in error_message:
-                    raise ValueError("Error: Phone number has been exist")
-
-            raise
-
-        except Exception:
-            # Nếu một bước lỗi -> rollback toàn bộ
-            self.conn.rollback()
-            raise
-
-        finally:
-            cursor.close()
-
-    def login(self, phone_input, password_hash_input):
-        cursor = self.conn.cursor()
-
-        try:
-            query = """
-                SELECT password_hash 
-                FROM users 
-                WHERE phone = %s 
-                LIMIT 1
-            """
-            cursor.execute(query, (phone_input,))
-            result = cursor.fetchone()
-
-            #User is not exist
-            if result is None:
-                return False
-
-            # result is a tuple (password_hash,)
-            db_password_hash = result['password_hash']
-
-            # Compare password hash
-            return password_hash_input == db_password_hash
-
-        except Exception as e:
-            self.conn.rollback()
-            raise
-
-        finally:
-            cursor.close()
     def view_user_by_id(self, user_id):
-        cursor = self.conn.cursor()
+        with self.cursor() as cur:
+            cur.execute("SELECT user_id, user_name, email, phone FROM users WHERE user_id=%s LIMIT 1", (user_id,))
+            return cur.fetchone()
 
-        try:
-            query = """
-                    SELECT *
-                    FROM users
-                    WHERE user_id = %s
-                    LIMIT 1
-                    """
+    def update_profile(self, user_id, user_name, email, phone):
+        with self.cursor() as cur:
+            cur.execute("UPDATE users SET user_name=%s, email=%s, phone=%s WHERE user_id=%s",
+                        (user_name, email, phone, user_id))
 
-            cursor.execute(query, (user_id,))
-            user = cursor.fetchone()
-
-            if not user: #User is not exist!
-                return False
-
-            return user
-
-        except Exception as e:
-            self.conn.rollback()
-            raise
-
-        finally:
-            cursor.close()
+    def update_password_hash(self, user_id, password_hash):
+        with self.cursor() as cur:
+            cur.execute("UPDATE users SET password_hash=%s WHERE user_id=%s", (password_hash, user_id))

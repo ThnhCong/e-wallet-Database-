@@ -1,158 +1,576 @@
-from src.config.database.connection import get_db_connection
+# src/app.py
+"""CLI e-wallet (Presentation Layer): chi nhap/xuat, goi Controller, KHONG viet SQL.
 
-from src.modules.user.user_repository import UserRepository
-from src.modules.user.user_service import UserService
-from src.modules.user.user_controller import UserController
+Chay (dat DB_USER, DB_PASSWORD truoc):   python src/app.py
+hoac     python -m src.app
 
-from src.modules.wallet.wallet_repository import WalletRepository
-from src.modules.wallet.wallet_service import WalletService
-from src.modules.wallet.wallet_controller import WalletController
+Moi thao tac lay 1 connection tu pool -> 1 thao tac = 1 giao dich DB;
+xong thi tra ve pool.
+"""
+import logging
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # de `import src.xxx` chay duoc moi noi
+
+from src.modules.audit_logs.audit_repository import AuditRepository                   # noqa: E402
+from src.config.database.connection import get_db_connection                           # noqa: E402
+from src.modules.user.user_controller import UserController                            # noqa: E402
+from src.modules.user.user_repository import UserRepository                            # noqa: E402
+from src.modules.user.user_service import UserService                                  # noqa: E402
+from src.modules.wallet.wallet_controller import WalletController                      # noqa: E402
+from src.modules.wallet.wallet_repository import WalletRepository                      # noqa: E402
+from src.modules.wallet.wallet_service import WalletService                            # noqa: E402
+
+logging.basicConfig(
+    filename="ewallet.log",
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
+log = logging.getLogger("ewallet.cli")
+
+MAX_LOGIN_FAILS = 3
+LOCKOUT_SECONDS = 60
+
+
+# ---------------------------------------------------------------- hien thi
+def money(v):
+    return f"{v:,.2f}"
+
+
+def table(rows, cols):
+    """cols = [(tieu de, key hoac ham)]"""
+    if not rows:
+        print("(no data)")
+        return
+
+    cells = [[str(f(r) if callable(f) else r[f]) for _, f in cols] for r in rows]
+    widths = [
+        max(len(h), *(len(c[i]) for c in cells))
+        for i, (h, _) in enumerate(cols)
+    ]
+
+    line = "  ".join(
+        h.ljust(w) for (h, _), w in zip(cols, widths)
+    )
+
+    print(line)
+    print("-" * len(line))
+
+    for c in cells:
+        print("  ".join(v.ljust(w) for v, w in zip(c, widths)))
+
+
+def ask(prompt):
+    return input(prompt).strip()
+
+
+WALLET_COLS = [
+    ("ID", "wallet_id"),
+    ("Currency", "currency"),
+    ("Balance", lambda w: money(w["balance"])),
+    ("Weekly limit", lambda w: money(w["limit_week"])),
+    ("Remaining", lambda w: money(w["remain_limit_week"])),
+    ("Status", "status")
+]
+
+
+# ---------------------------------------------------------------- 1 thao tac = 1 connection
+def run(action):
+    """action(user_controller, wallet_controller) -> ket qua.
+    Loi nghiep vu (ValueError) in ra, khong crash.
+    """
+    conn = get_db_connection()
+
+    try:
+        user_repo = UserRepository(conn)
+        wallet_repo = WalletRepository(conn)
+        audit_repo = AuditRepository(conn)
+
+        users = UserController(
+            UserService(user_repo, audit_repo, wallet_repo)
+        )
+
+        wallets = WalletController(
+            WalletService(wallet_repo, audit_repo)
+        )
+
+        return action(users, wallets)
+
+    except ValueError as e:
+        # gom ca ServiceError: thong bao da than thien
+        print(f"\n[ERROR] {e}")
+
+    except RuntimeError as e:
+        # vi du thieu DB_USER
+        print(f"\n[ERROR] {e}")
+
+    except Exception:
+        log.exception("Unhandled error")
+        print("\n[ERROR] Operation failed. See ewallet.log for details.")
+
+    finally:
+        conn.close()                            # tra connection ve pool
+
+    return None
+
+
+# ---------------------------------------------------------------- chuc nang
+def do_register():
+    print("--- Register ---")
+
+    name = ask("Username: ")
+    email = ask("Email: ")
+    phone = ask("Phone: ")
+
+    # SUA DUY NHAT O DAY:
+    # Khong dung getpass vi PyCharm console cua ban dang
+    # bi dung process sau khi nhan Enter o Phone.
+    password = ask("Password (>=6 chars): ")
+
+    currency = ask(
+        "Create an initial wallet? VND/USD (Enter to skip): "
+    ) or None
+
+    user_id = run(
+        lambda u, w: u.register(
+            name,
+            password,
+            email,
+            phone,
+            currency
+        )
+    )
+
+    if user_id:
+        print(
+            f"\n[OK] Registration successful! User ID: {user_id}"
+        )
+
+
+def do_login(state):
+    now = time.time()
+
+    if now < state["locked_until"]:
+        print(
+            f"\n[ERROR] Too many failed attempts. "
+            f"Try again in {int(state['locked_until'] - now)} seconds."
+        )
+        return None
+
+    phone = ask("Phone: ")
+
+    # SUA DUY NHAT O DAY:
+    # Khong dung getpass vi cung co the gay loi tren PyCharm console.
+    password = ask("Password: ")
+
+    user = run(
+        lambda u, w: u.login(phone, password)
+    )
+
+    if user:
+        state["fails"] = 0
+
+        print(
+            f"\n[OK] Login successful. "
+            f"Welcome, {user['user_name']}!"
+        )
+
+        return user
+
+    state["fails"] += 1
+
+    if state["fails"] >= MAX_LOGIN_FAILS:
+        state["fails"] = 0
+        state["locked_until"] = time.time() + LOCKOUT_SECONDS
+
+        print(
+            f"[ERROR] Login is locked for {LOCKOUT_SECONDS} seconds."
+        )
+
+    return None
+
+
+def do_view_user(user):
+    info = run(
+        lambda u, w: u.get_user_by_id(user["user_id"])
+    )
+
+    if info:
+        print(
+            "\n================================\n"
+            "        USER INFORMATION\n"
+            "================================"
+        )
+
+        print(
+            f"User ID   : {info['user_id']}\n"
+            f"Username  : {info['user_name']}\n"
+            f"Email     : {info['email']}\n"
+            f"Phone     : {info['phone']}"
+        )
+
+
+def do_update_profile(user):
+    print("(Press Enter to keep the current value)")
+
+    name = ask("New username: ")
+    email = ask("New email: ")
+    phone = ask("New phone: ")
+
+    info = run(
+        lambda u, w: u.update_profile(
+            user["user_id"],
+            name,
+            email,
+            phone
+        )
+    )
+
+    if info:
+        user.update(
+            user_name=info["user_name"],
+            email=info["email"],
+            phone=info["phone"]
+        )
+
+        print("\n[OK] Profile updated.")
+
+
+def do_change_password(user):
+    old = ask("Current password: ")
+    new = ask("New password (>=6 chars): ")
+
+    if run(
+        lambda u, w: (
+            u.change_password(
+                user["user_id"],
+                old,
+                new
+            ),
+            True
+        )[1]
+    ):
+        print("\n[OK] Password changed.")
+
+
+def show_wallets(user):
+    rows = run(
+        lambda u, w: w.list_wallets(user["user_id"])
+    )
+
+    if rows is not None:
+        table(rows, WALLET_COLS)
+
+    return rows
+
+
+def do_view_wallet(user):
+    show_wallets(user)
+
+    wid = ask("Wallet ID for details: ")
+
+    info = run(
+        lambda u, w: w.get_wallet_by_id(
+            user["user_id"],
+            wid
+        )
+    )
+
+    if info:
+        print(
+            "\n================================\n"
+            "        WALLET INFORMATION\n"
+            "================================"
+        )
+
+        print(
+            f"Wallet ID    : {info['wallet_id']}\n"
+            f"Owner        : {info['user_name']} (user {info['user_id']})\n"
+            f"Balance      : {money(info['balance'])} {info['currency']}\n"
+            f"Weekly limit : {money(info['limit_week'])} {info['currency']}\n"
+            f"Remaining    : {money(info['remain_limit_week'])} {info['currency']}\n"
+            f"Status       : {info['status']}\n"
+            f"Created at   : {info['created_at']}"
+        )
+
+
+def do_create_wallet(user):
+    currency = ask("Currency (VND/USD): ")
+
+    w = run(
+        lambda u, wl: wl.create_wallet(
+            user["user_id"],
+            currency
+        )
+    )
+
+    if w:
+        print(
+            f"\n[OK] Wallet #{w['wallet_id']} created "
+            f"({w['currency']}, weekly limit "
+            f"{money(w['limit_week'])})."
+        )
+
+
+def do_lock(user, lock):
+    show_wallets(user)
+
+    wid = ask("Wallet ID: ")
+
+    w = run(
+        lambda u, wl: (
+            wl.lock_wallet if lock else wl.unlock_wallet
+        )(
+            user["user_id"],
+            wid
+        )
+    )
+
+    if w:
+        print(
+            f"\n[OK] Wallet #{w['wallet_id']} "
+            f"is now {w['status']}."
+        )
+
+
+def _print_tx(res):
+    if res:
+        line = (
+            f"\n[OK] Transaction #{res['transaction_id']} "
+            f"{res['type']} {money(res['amount'])} - SUCCESS. "
+            f"New balance of wallet {res['wallet_id']}: "
+            f"{money(res['balance'])}"
+        )
+
+        if res["type"] == "TRANSFER":
+            line += (
+                f". Remaining weekly limit: "
+                f"{money(res['remain_limit_week'])}"
+            )
+
+        print(line)
+
+
+def do_deposit(user):
+    show_wallets(user)
+
+    wid = ask("Wallet ID: ")
+    amount = ask("Deposit amount: ")
+
+    _print_tx(
+        run(
+            lambda u, w: w.deposit(
+                user["user_id"],
+                wid,
+                amount
+            )
+        )
+    )
+
+
+def do_withdraw(user):
+    show_wallets(user)
+
+    wid = ask("Wallet ID: ")
+    amount = ask("Withdrawal amount: ")
+
+    _print_tx(
+        run(
+            lambda u, w: w.withdraw(
+                user["user_id"],
+                wid,
+                amount
+            )
+        )
+    )
+
+
+def do_transfer(user):
+    show_wallets(user)
+
+    src = ask("From wallet ID (yours): ")
+    dst = ask("To wallet ID: ")
+    amount = ask("Transfer amount: ")
+
+    _print_tx(
+        run(
+            lambda u, w: w.transfer(
+                user["user_id"],
+                src,
+                dst,
+                amount
+            )
+        )
+    )
+
+
+def do_history(user):
+    tx_type = ask(
+        "Filter type DEPOSIT/WITHDRAW/TRANSFER (Enter = all): "
+    )
+
+    status = ask(
+        "Filter status PENDING/SUCCESS/FAIL (Enter = all): "
+    )
+
+    rows = run(
+        lambda u, w: w.history(
+            user["user_id"],
+            tx_type,
+            status
+        )
+    )
+
+    if rows is None:
+        return
+
+    table(
+        rows,
+        [
+            ("ID", "transaction_id"),
+            ("Type", "type"),
+            ("Amount", lambda t: money(t["amount"])),
+            ("From", lambda t: t["sender_id"] or "-"),
+            ("To", lambda t: t["receiver_id"] or "-"),
+            ("Status", "status"),
+            ("Time", "created_at")
+        ]
+    )
+
+    tid = ask(
+        "Transaction ID for details (Enter to skip): "
+    )
+
+    if tid:
+        d = run(
+            lambda u, w: w.transaction_detail(
+                user["user_id"],
+                tid
+            )
+        )
+
+        if d:
+            for k, v in d.items():
+                if not k.endswith("_user_id"):
+                    print(f"  {k}: {v}")
+
+
+def do_activity(user):
+    rows = run(
+        lambda u, w: u.get_activity(
+            user["user_id"]
+        )
+    )
+
+    if rows is not None:
+        table(
+            rows,
+            [
+                ("Log", "audit_log_id"),
+                ("Action", "action"),
+                ("Wallet", lambda a: a["wallet_id"] or "-"),
+                ("Transaction", lambda a: a["transaction_id"] or "-"),
+                ("Time", "created_at")
+            ]
+        )
+
+
+# ---------------------------------------------------------------- menu
+GUEST_MENU = (
+    "\n================================\n"
+    "        E-WALLET SYSTEM\n"
+    "================================\n"
+    "1. Register\n"
+    "2. Login\n"
+    "0. Exit"
+)
+
+USER_MENU = (
+    "\n=== Hello, {name} ===\n"
+    " 1. View my info     2. Update info       3. Change password\n"
+    " 4. My wallets       5. View wallet       6. Create wallet\n"
+    " 7. Lock wallet      8. Unlock wallet\n"
+    " 9. Deposit         10. Withdraw         11. Transfer\n"
+    "12. Transaction history                  13. My activity log\n"
+    " 0. Logout"
+)
 
 
 def main():
-    print("================================")
-    print("        E-WALLET SYSTEM")
-    print("================================")
+    user = None
+
+    state = {
+        "fails": 0,
+        "locked_until": 0
+    }
+
+    actions = {
+        "1": do_view_user,
+        "2": do_update_profile,
+        "3": do_change_password,
+        "4": show_wallets,
+        "5": do_view_wallet,
+        "6": do_create_wallet,
+        "7": lambda u: do_lock(u, True),
+        "8": lambda u: do_lock(u, False),
+        "9": do_deposit,
+        "10": do_withdraw,
+        "11": do_transfer,
+        "12": do_history,
+        "13": do_activity
+    }
 
     while True:
-        print("\n1. Register")
-        print("2. Login")
-        print("3. Deposit")
-        print("4. Withdraw")
-        print("5. Transfer")
-        print("6. View Wallet")
-        print("7. View User")
-        print("8. Register wallet")
-        print("0. Exit")
+        try:
+            if user is None:
+                print(GUEST_MENU)
 
-        choice = input("Choose: ").strip()
+                choice = ask("Choose: ")
 
-        if choice == "0":
-            print("Goodbye!")
+                if choice == "1":
+                    do_register()
+
+                elif choice == "2":
+                    user = do_login(state)
+
+                elif choice == "0":
+                    print("Goodbye!")
+                    break
+
+                else:
+                    print("Invalid choice.")
+
+            else:
+                print(
+                    USER_MENU.format(
+                        name=user["user_name"]
+                    )
+                )
+
+                choice = ask("Choose: ")
+
+                if choice == "0":
+                    run(
+                        lambda u, w: u.logout(
+                            user["user_id"]
+                        )
+                    )
+
+                    print("\n[OK] Logged out.")
+                    user = None
+
+                elif choice in actions:
+                    actions[choice](user)
+
+                else:
+                    print("Invalid choice.")
+
+        except (KeyboardInterrupt, EOFError):
+            print("\nGoodbye!")
             break
 
-        if choice not in ["1", "2", "3", "4", "5", "6", "7", "8"]:
-            print("Invalid choice.")
-            continue
-
-        # Mỗi yêu cầu thao tác sẽ lấy 1 connection mới từ pool
-        db_conn = get_db_connection()
-
-        try:
-            user_repo = UserRepository(db_conn)
-            user_service = UserService(user_repo)
-            user_controller = UserController(user_service)
-
-            wallet_repo = WalletRepository(db_conn)
-            wallet_service = WalletService(wallet_repo)
-            wallet_controller = WalletController(wallet_service)
-
-            if choice == "1":
-                user_name = input("Enter username: ").strip()
-                password = input("Enter password: ").strip()
-                email = input("Enter email: ").strip()
-                phone = input("Enter phone: ").strip()
-
-                result = user_controller.register(user_name, password, email, phone)
-                print("\nRegistration successful!")
-                print(f"User ID: {result}")
-
-            elif choice == "2":
-                try:
-
-                    wrong_time = 0
-                    while wrong_time < 3:
-
-                        phone_input = input("Enter your phone").strip()
-                        password_input = input("Enter your password").strip()
-
-                        if user_controller.login(phone_input, password_input):
-                            break
-                        else:
-                            wrong_time += 1
-
-                    if wrong_time == 3:
-                        print("Waiting 1 minute to login again!")
-
-                except ValueError as e:
-                    print(f"\n{e}")
-
-            elif choice == "3":
-                wallet_id = int(input("Enter wallet ID: "))
-                amount = input("Enter deposit amount: ")
-
-                result = wallet_controller.deposit(wallet_id, amount)
-                print("\nDeposit successful!")
-                print(result)
-
-            elif choice == "4":
-                wallet_id = int(input("Enter wallet ID: "))
-                amount = input("Enter withdrawal amount: ")
-
-                result = wallet_controller.withdraw(wallet_id, amount)
-                print("\nWithdrawal successful!")
-                print(result)
-
-            elif choice == "5":
-                sender_id = int(input("Enter sender user ID: "))
-                receiver_id = int(input("Enter receiver user ID: "))
-                amount = input("Enter transfer amount: ")
-
-                result = wallet_controller.transfer(sender_id, receiver_id, amount)
-                print("\nTransfer successful!")
-                print(result)
-
-            elif choice == "6":
-                wallet_id = int(input("Enter wallet ID: "))
-                wallet_info = wallet_controller.get_wallet_by_id(wallet_id)
-
-                if wallet_info:
-                    print("\n================================")
-                    print("        WALLET INFORMATION")
-                    print("================================")
-                    print(f"Wallet ID   : {wallet_info.get('wallet_id')}")
-                    print(f"User ID     : {wallet_info.get('user_id')}")
-                    print(f"Owner Name  : {wallet_info.get('user_name')}")
-                    print(f"Balance     : {wallet_info.get('balance')} {wallet_info.get('currency')}")
-                    print(f"Weekly Limit: {wallet_info.get('limit_week')} {wallet_info.get('currency')}")
-                    print(f"Status : {wallet_info.get('status')}")
-                    print(f"Create at: {wallet_info.get('create_at')}")
-                    print("================================")
-                else:
-                    print("\nWallet not found!")
-
-            elif choice == "7":
-                user_id = int(input("Enter user ID: "))
-                user_info = user_controller.get_user_by_id(user_id)
-
-                if user_info:
-                    print("\n================================")
-                    print("        USER INFORMATION        ")
-                    print("================================")
-                    print(f"User ID   : {user_info.get('user_id')}")
-                    print(f"Username  : {user_info.get('user_name')}")
-                    print(f"Email     : {user_info.get('email')}")
-                    print(f"Phone     : {user_info.get('phone')}")
-                    print("================================")
-                else:
-                    print("\nUser not found!")
-
-            elif choice == "8":
-                user_id_for_wallet = int(input("Enter user_id: "))
-                currency = input("Enter currency: ").strip()
-                wallet_controller.create_wallet(user_id_for_wallet, currency)
-                print("\nCreate wallet successful!")
-
-        except ValueError as e:
-            print(f"\n{e}")
-
-        except Exception as e:
-            print("\nOperation failed!")
-            print(f"Reason: {e}")
-
-        finally:
-            # Đảm bảo connection luôn được trả về pool sau mỗi lệnh
-            db_conn.close()
 
 if __name__ == "__main__":
     main()
