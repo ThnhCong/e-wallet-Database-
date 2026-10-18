@@ -1,20 +1,35 @@
-# src/common/audit_repository.py
+# src/modules/audit_logs/audit_repository.py
+"""Chi chua SQL cua bang audit_logs. Bang nay bat bien (trigger chan UPDATE/DELETE)
+nen repository chi co INSERT va SELECT."""
 from src.common.db import BaseRepository
+
+_COLUMNS = "audit_log_id, user_id, wallet_id, transaction_id, action, created_at"
 
 
 class AuditRepository(BaseRepository):
-    """audit_logs: chi INSERT / SELECT (bang bat bien, trigger chan UPDATE/DELETE).
-    12 action hop le: REGISTER LOGIN LOGOUT CHANGE_PASSWORD UPDATE_PROFILE CREATE_WALLET LOCK_WALLET
-    UNLOCK_WALLET DEPOSIT WITHDRAW TRANSFER TRANSFER_RECEIVED  (khong co DEBIT / CREDIT)."""
 
     def create_audit_log(self, user_id, wallet_id, transaction_id, action):
         with self.cursor() as cur:
-            cur.execute("INSERT INTO audit_logs (user_id, wallet_id, transaction_id, action) VALUES (%s,%s,%s,%s)",
-                        (user_id, wallet_id, transaction_id, action))
+            cur.execute("INSERT INTO audit_logs (user_id, wallet_id, transaction_id, action) "
+                        "VALUES (%s,%s,%s,%s)", (user_id, wallet_id, transaction_id, action))
             return cur.lastrowid
 
-    def list_by_user(self, user_id, limit=20):
+    def list_logs(self, user_id=None, action=None, limit=20):
+        """Moi nhat truoc. user_id / action la bo loc tuy chon (None = khong loc)."""
+        conditions, params = [], []
+        if user_id is not None:
+            conditions.append("user_id=%s")
+            params.append(user_id)
+        if action:
+            conditions.append("action=%s")
+            params.append(action)
+
+        sql = f"SELECT {_COLUMNS} FROM audit_logs"
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY created_at DESC, audit_log_id DESC LIMIT %s"
+        params.append(limit)
+
         with self.cursor() as cur:
-            cur.execute("SELECT audit_log_id, action, wallet_id, transaction_id, created_at FROM audit_logs "
-                        "WHERE user_id=%s ORDER BY audit_log_id DESC LIMIT %s", (user_id, limit))
+            cur.execute(sql, params)
             return cur.fetchall()

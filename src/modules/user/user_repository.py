@@ -1,4 +1,5 @@
 # src/modules/user/user_repository.py
+"""Chi chua SQL cua bang users."""
 from src.common.db import BaseRepository
 
 
@@ -26,6 +27,12 @@ class UserRepository(BaseRepository):
         with self.cursor() as cur:
             cur.execute("SELECT user_id, user_name, email, phone FROM users WHERE user_id=%s LIMIT 1", (user_id,))
             return cur.fetchone()
+
+    def list_users(self, limit=50):
+        """Khong tra password_hash."""
+        with self.cursor() as cur:
+            cur.execute("SELECT user_id, user_name, email, phone FROM users ORDER BY user_id LIMIT %s", (limit,))
+            return cur.fetchall()
 
     def update_profile(self, user_id, user_name, email, phone):
         with self.cursor() as cur:

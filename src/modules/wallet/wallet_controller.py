@@ -19,17 +19,5 @@ class WalletController:
     def unlock_wallet(self, user_id, wallet_id):
         return self.wallet_service.set_locked(user_id, wallet_id, False)
 
-    def deposit(self, user_id, wallet_id, amount):
-        return self.wallet_service.deposit(user_id, wallet_id, amount)
-
-    def withdraw(self, user_id, wallet_id, amount):
-        return self.wallet_service.withdraw(user_id, wallet_id, amount)
-
-    def transfer(self, user_id, sender_wallet_id, receiver_wallet_id, amount):
-        return self.wallet_service.transfer(user_id, sender_wallet_id, receiver_wallet_id, amount)
-
-    def history(self, user_id, tx_type=None, status=None, limit=20):
-        return self.wallet_service.history(user_id, tx_type, status, limit)
-
-    def transaction_detail(self, user_id, transaction_id):
-        return self.wallet_service.transaction_detail(user_id, transaction_id)
+    def list_all_wallets(self, user_id=None, limit=50):
+        return self.wallet_service.list_all_wallets(user_id, limit)

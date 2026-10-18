@@ -1,16 +1,22 @@
 # src/modules/user/user_service.py
+"""Nghiep vu tai khoan: dang ky, dang nhap/xuat, ho so, doi mat khau.
+Audit log duoc ghi qua AuditService, trong CUNG giao dich DB voi thao tac."""
 from src.common.db import db_transaction
 from src.common.errors import ServiceError
+from src.common.query_params import DEFAULT_ADMIN_LIMIT, normalize_limit
 from src.common.security import hash_password, needs_rehash, verify_password
 from src.common.validators import (parse_currency, require_text, validate_email, validate_password, validate_phone)
+from src.modules.audit_logs.audit_actions import AuditAction
+
+_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone")     # khong bao gio tra password_hash
 
 
 class UserService:
 
-    def __init__(self, user_repository, audit_repository, wallet_repository=None):
+    def __init__(self, user_repository, audit_service, wallet_service=None):
         self.user_repo = user_repository
-        self.audit_repo = audit_repository
-        self.wallet_repo = wallet_repository      # chi can neu muon tao vi ngay khi dang ky
+        self.audit = audit_service
+        self.wallet_service = wallet_service      # chi can neu muon tao vi ngay khi dang ky
         self.conn = user_repository.conn
 
     def register(self, user_name, password, email, phone, currency=None):
@@ -24,10 +30,9 @@ class UserService:
 
         with db_transaction(self.conn, "Register"):
             user_id = self.user_repo.create_user(name, password_hash, email, phone)
-            self.audit_repo.create_audit_log(user_id, None, None, "REGISTER")
-            if currency and self.wallet_repo is not None:
-                wallet_id = self.wallet_repo.create_wallet(user_id, currency)
-                self.audit_repo.create_audit_log(user_id, wallet_id, None, "CREATE_WALLET")
+            self.audit.record(user_id, AuditAction.REGISTER)
+            if currency and self.wallet_service is not None:
+                self.wallet_service.create_in_open_transaction(user_id, currency)
         return user_id
 
     def login(self, phone_input, password_input):
@@ -39,12 +44,12 @@ class UserService:
                 raise ServiceError("AUTH_FAILED", "Your phone or your password is wrong!")
             if needs_rehash(user["password_hash"]):
                 self.user_repo.update_password_hash(user["user_id"], hash_password(password_input))
-            self.audit_repo.create_audit_log(user["user_id"], None, None, "LOGIN")
-        return {k: user[k] for k in ("user_id", "user_name", "email", "phone")}
+            self.audit.record(user["user_id"], AuditAction.LOGIN)
+        return {field: user[field] for field in _PUBLIC_FIELDS}
 
     def logout(self, user_id):
         with db_transaction(self.conn, "Logout"):
-            self.audit_repo.create_audit_log(user_id, None, None, "LOGOUT")
+            self.audit.record(user_id, AuditAction.LOGOUT)
 
     def view_user_by_id(self, user_id):
         with db_transaction(self.conn, "View user"):
@@ -53,14 +58,14 @@ class UserService:
     def update_profile(self, user_id, user_name=None, email=None, phone=None):
         """Truong bo trong = giu nguyen."""
         with db_transaction(self.conn, "Update profile"):
-            cur = self.user_repo.view_user_by_id(user_id)
-            if cur is None:
+            current = self.user_repo.view_user_by_id(user_id)
+            if current is None:
                 raise ServiceError("USER_NOT_FOUND", "The user does not exist.")
-            name = require_text(user_name, "Name", 100) if user_name else cur["user_name"]
-            mail = validate_email(email) if email else cur["email"]
-            tel = validate_phone(phone) if phone else cur["phone"]
+            name = require_text(user_name, "Name", 100) if user_name else current["user_name"]
+            mail = validate_email(email) if email else current["email"]
+            tel = validate_phone(phone) if phone else current["phone"]
             self.user_repo.update_profile(user_id, name, mail, tel)
-            self.audit_repo.create_audit_log(user_id, None, None, "UPDATE_PROFILE")
+            self.audit.record(user_id, AuditAction.UPDATE_PROFILE)
             return self.user_repo.view_user_by_id(user_id)
 
     def change_password(self, user_id, old_password, new_password):
@@ -72,8 +77,10 @@ class UserService:
             if user is None or not verify_password(old_password or "", user["password_hash"]):
                 raise ServiceError("AUTH_FAILED", "The current password is incorrect.")
             self.user_repo.update_password_hash(user_id, hash_password(new_password))
-            self.audit_repo.create_audit_log(user_id, None, None, "CHANGE_PASSWORD")
+            self.audit.record(user_id, AuditAction.CHANGE_PASSWORD)
 
-    def get_activity(self, user_id, limit=20):
-        with db_transaction(self.conn, "View activity"):
-            return self.audit_repo.list_by_user(user_id, limit)
+    # ---------------------------------------------------------------- quan tri
+    def list_users(self, limit=DEFAULT_ADMIN_LIMIT):
+        limit = normalize_limit(limit)
+        with db_transaction(self.conn, "View users"):
+            return self.user_repo.list_users(limit)
