@@ -21,6 +21,3 @@ class UserController:
 
     def change_password(self, user_id, old_password, new_password):
         return self.user_service.change_password(user_id, old_password, new_password)
-
-    def list_users(self, limit=50):
-        return self.user_service.list_users(limit)

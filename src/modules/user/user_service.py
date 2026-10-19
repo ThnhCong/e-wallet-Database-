@@ -3,12 +3,11 @@
 Audit log duoc ghi qua AuditService, trong CUNG giao dich DB voi thao tac."""
 from src.common.db import db_transaction
 from src.common.errors import ServiceError
-from src.common.query_params import DEFAULT_ADMIN_LIMIT, normalize_limit
 from src.common.security import hash_password, needs_rehash, verify_password
 from src.common.validators import (parse_currency, require_text, validate_email, validate_password, validate_phone)
 from src.modules.audit_logs.audit_actions import AuditAction
 
-_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone")     # khong bao gio tra password_hash
+_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone", "role")     # khong bao gio tra password_hash
 
 
 class UserService:
@@ -78,9 +77,3 @@ class UserService:
                 raise ServiceError("AUTH_FAILED", "The current password is incorrect.")
             self.user_repo.update_password_hash(user_id, hash_password(new_password))
             self.audit.record(user_id, AuditAction.CHANGE_PASSWORD)
-
-    # ---------------------------------------------------------------- quan tri
-    def list_users(self, limit=DEFAULT_ADMIN_LIMIT):
-        limit = normalize_limit(limit)
-        with db_transaction(self.conn, "View users"):
-            return self.user_repo.list_users(limit)

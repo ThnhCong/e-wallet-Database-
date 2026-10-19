@@ -4,14 +4,10 @@
 Chay (dat DB_USER, DB_PASSWORD truoc):   python src/app.py
 hoac     python -m src.app
 
-Che do quan tri (bao cao muc 1.2.H): dat bien moi truong EWALLET_ADMIN_KEY roi chon "Admin" o menu dau.
-
 Moi thao tac lay 1 connection tu pool -> 1 thao tac = 1 giao dich DB;
 xong thi tra ve pool.
 """
-import hmac
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -30,7 +26,6 @@ log = logging.getLogger("ewallet.cli")
 
 MAX_LOGIN_FAILS = 3
 LOCKOUT_SECONDS = 60
-ADMIN_KEY_ENV = "EWALLET_ADMIN_KEY"
 
 
 # ================================================================ hien thi
@@ -307,53 +302,49 @@ def do_activity(user):
         table(rows, AUDIT_COLS)
 
 
-# ================================================================ quan tri
-def admin_authenticated():
-    """Schema chua co cot vai tro (role), nen quan tri duoc bao ve bang khoa trong bien moi truong."""
-    expected = os.environ.get(ADMIN_KEY_ENV)
-    if not expected:
-        print(f"\n[ERROR] Admin mode is disabled. Set the {ADMIN_KEY_ENV} environment variable to enable it.")
-        return False
-    if hmac.compare_digest(ask("Admin key: ").encode(), expected.encode()):
-        return True
-    print("\n[ERROR] Wrong admin key.")
-    return False
-
-
-def admin_users():
-    rows = run(lambda c: c.users.list_users())
+# ================================================================ quan tri (chi tai khoan role 'admin')
+def admin_users(admin):
+    rows = run(lambda c: c.admin.list_users(admin["user_id"]))
     if rows is not None:
-        table(rows, [("ID", "user_id"), ("Username", "user_name"), ("Email", "email"), ("Phone", "phone")])
+        table(rows, [("ID", "user_id"), ("Username", "user_name"), ("Email", "email"), ("Phone", "phone"),
+                     ("Role", "role"), ("Wallets", "wallet_count")])
 
 
-def admin_wallets():
+def admin_wallets(admin):
     user_id = ask("Filter by user ID (Enter = all): ")
-    rows = run(lambda c: c.wallets.list_all_wallets(user_id))
+    rows = run(lambda c: c.admin.list_wallets(admin["user_id"], user_id))
     if rows is not None:
         table(rows, ADMIN_WALLET_COLS)
 
 
-def admin_transactions():
+def admin_transactions(admin):
     tx_type = ask("Filter type DEPOSIT/WITHDRAW/TRANSFER (Enter = all): ")
     status = ask("Filter status PENDING/SUCCESS/FAIL (Enter = all): ")
-    rows = run(lambda c: c.transactions.list_all_transactions(tx_type, status))
+    rows = run(lambda c: c.admin.list_transactions(admin["user_id"], tx_type, status))
     if rows is not None:
         table(rows, TRANSACTION_COLS)
 
 
-def admin_transaction_detail():
+def admin_transaction_detail(admin):
     tid = ask("Transaction ID: ")
-    detail = run(lambda c: c.transactions.get_transaction_by_id(tid))
+    detail = run(lambda c: c.admin.get_transaction(admin["user_id"], tid))
     if detail:
         print_record(detail)
 
 
-def admin_audit_logs():
+def admin_audit_logs(admin):
     user_id = ask("Filter by user ID (Enter = all): ")
     action = ask("Filter action (Enter = all): ")
-    rows = run(lambda c: c.audit.list_logs(user_id, action))
+    rows = run(lambda c: c.admin.list_audit_logs(admin["user_id"], user_id, action))
     if rows is not None:
         table(rows, [("User", "user_id")] + AUDIT_COLS)
+
+
+def admin_lock(admin, lock):
+    wid = ask("Wallet ID: ")
+    wallet = run(lambda c: (c.admin.lock_wallet if lock else c.admin.unlock_wallet)(admin["user_id"], wid))
+    if wallet:
+        print(f"\n[OK] Wallet #{wallet['wallet_id']} of {wallet['user_name']} is now {wallet['status']}.")
 
 
 ADMIN_MENU = (
@@ -361,6 +352,7 @@ ADMIN_MENU = (
     "1. Users              2. Wallets\n"
     "3. Transactions       4. Transaction detail\n"
     "5. Audit logs\n"
+    "6. Lock wallet        7. Unlock wallet\n"
     "0. Back"
 )
 
@@ -369,14 +361,13 @@ ADMIN_ACTIONS = {
     "2": admin_wallets,
     "3": admin_transactions,
     "4": admin_transaction_detail,
-    "5": admin_audit_logs
+    "5": admin_audit_logs,
+    "6": lambda a: admin_lock(a, True),
+    "7": lambda a: admin_lock(a, False)
 }
 
 
-def admin_loop():
-    if not admin_authenticated():
-        return
-
+def admin_loop(admin):
     while True:
         print(ADMIN_MENU)
         choice = ask("Choose: ")
@@ -384,7 +375,7 @@ def admin_loop():
         if choice == "0":
             return
         if choice in ADMIN_ACTIONS:
-            ADMIN_ACTIONS[choice]()
+            ADMIN_ACTIONS[choice](admin)
         else:
             print("Invalid choice.")
 
@@ -396,7 +387,6 @@ GUEST_MENU = (
     "================================\n"
     "1. Register\n"
     "2. Login\n"
-    "3. Admin\n"
     "0. Exit"
 )
 
@@ -441,8 +431,6 @@ def main():
                     do_register()
                 elif choice == "2":
                     user = do_login(state)
-                elif choice == "3":
-                    admin_loop()
                 elif choice == "0":
                     print("Goodbye!")
                     break
@@ -450,13 +438,16 @@ def main():
                     print("Invalid choice.")
 
             else:
-                print(USER_MENU.format(name=user["user_name"]))
+                is_admin = str(user.get("role", "")).lower() == "admin"
+                print(USER_MENU.format(name=user["user_name"]) + ("\n14. Admin panel" if is_admin else ""))
                 choice = ask("Choose: ")
 
                 if choice == "0":
                     run(lambda c: c.users.logout(user["user_id"]))
                     print("\n[OK] Logged out.")
                     user = None
+                elif choice == "14" and is_admin:
+                    admin_loop(user)
                 elif choice in USER_ACTIONS:
                     USER_ACTIONS[choice](user)
                 else:
