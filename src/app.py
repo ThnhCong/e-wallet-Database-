@@ -307,7 +307,7 @@ def admin_users(admin):
     rows = run(lambda c: c.admin.list_users(admin["user_id"]))
     if rows is not None:
         table(rows, [("ID", "user_id"), ("Username", "user_name"), ("Email", "email"), ("Phone", "phone"),
-                     ("Role", "role"), ("Wallets", "wallet_count")])
+                     ("Role", "user_role"), ("Wallets", "wallet_count")])
 
 
 def admin_wallets(admin):
@@ -438,7 +438,7 @@ def main():
                     print("Invalid choice.")
 
             else:
-                is_admin = str(user.get("role", "")).lower() == "admin"
+                is_admin = str(user.get("user_role", "")).lower() == "admin"
                 print(USER_MENU.format(name=user["user_name"]) + ("\n14. Admin panel" if is_admin else ""))
                 choice = ask("Choose: ")
 

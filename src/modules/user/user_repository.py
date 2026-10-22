@@ -13,19 +13,19 @@ class UserRepository(BaseRepository):
 
     def get_user_by_phone(self, phone):
         with self.cursor() as cur:
-            cur.execute("SELECT user_id, user_name, password_hash, email, phone, role FROM users WHERE phone=%s LIMIT 1",
+            cur.execute("SELECT user_id, user_name, password_hash, email, phone, user_role FROM users WHERE phone=%s LIMIT 1",
                         (phone,))
             return cur.fetchone()
 
     def get_user_with_hash(self, user_id):
         with self.cursor() as cur:
-            cur.execute("SELECT user_id, user_name, password_hash, email, phone, role FROM users WHERE user_id=%s",
+            cur.execute("SELECT user_id, user_name, password_hash, email, phone, user_role FROM users WHERE user_id=%s",
                         (user_id,))
             return cur.fetchone()
 
     def view_user_by_id(self, user_id):
         with self.cursor() as cur:
-            cur.execute("SELECT user_id, user_name, email, phone, role FROM users WHERE user_id=%s LIMIT 1", (user_id,))
+            cur.execute("SELECT user_id, user_name, email, phone, user_role FROM users WHERE user_id=%s LIMIT 1", (user_id,))
             return cur.fetchone()
 
     def update_profile(self, user_id, user_name, email, phone):

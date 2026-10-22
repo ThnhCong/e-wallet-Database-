@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS wallets (
     CONSTRAINT fk_wallets_user_id FOREIGN KEY (user_id) 
         REFERENCES users(user_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT chk_wallets_balance CHECK (balance >= 0),
-    CONSTRAINT chk_wallets_limit_week CHECK (limit_week >= 0),
     CONSTRAINT chk_wallets_remain_limit_week
 		CHECK (
 			remain_limit_week >= 0

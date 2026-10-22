@@ -7,7 +7,7 @@ from src.common.security import hash_password, needs_rehash, verify_password
 from src.common.validators import (parse_currency, require_text, validate_email, validate_password, validate_phone)
 from src.modules.audit_logs.audit_actions import AuditAction
 
-_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone", "role")     # khong bao gio tra password_hash
+_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone", "user_role")     # khong bao gio tra password_hash
 
 
 class UserService:
