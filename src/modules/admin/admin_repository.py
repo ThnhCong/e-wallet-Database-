@@ -12,7 +12,7 @@ class AdminRepository(BaseRepository):
         with self.cursor() as cur:
             cur.execute("SELECT user_role FROM users WHERE user_id=%s", (user_id,))
             row = cur.fetchone()
-            return row["role"] if row else None
+            return row["user_role"] if row else None
 
     def list_users(self, limit=50):
         """Moi user kem vai tro va so vi dang so huu."""
