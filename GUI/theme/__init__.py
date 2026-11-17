@@ -1,0 +1,1 @@
+"""EWallet GUI package."""

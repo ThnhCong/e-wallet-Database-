@@ -11,10 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     phone VARCHAR(20) NOT NULL,
-    user_role VARCHAR(20) NOT NULL DEFAULT 'user',
     PRIMARY KEY (user_id),
     CONSTRAINT uq_users_email UNIQUE (email),
     CONSTRAINT uq_users_phone UNIQUE (phone),
-    CONSTRAINT chk_users_email CHECK (email LIKE '%@%.%'),
-    CONSTRAINT chk_users_user_role CHECK (user_role IN ('user', 'admin'))
+    CONSTRAINT chk_users_email CHECK (email LIKE '%@%.%')
 ) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

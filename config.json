@@ -1,0 +1,6 @@
+{
+  "database": {"host": "127.0.0.1", "port": 3306, "user": "ewallet_app", "password": "514160", "name": "ewallet", "pool": {"max_connections": 10, "min_cached": 2, "max_cached": 5}},
+  "api": {"host": "0.0.0.0", "port": 8000},
+  "security": {"token_secret": "514160", "token_ttl_seconds": 3600},
+  "admin_accounts": ["0777777777"]
+}

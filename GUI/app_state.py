@@ -12,7 +12,7 @@ class AppState:
 
     @property
     def is_admin(self):
-        return bool(self.user and self.user.get("user_role", "").lower() == "admin")
+        return bool(self.user and self.user.get("is_admin", False))
 
     def clear(self):
         self.user = None

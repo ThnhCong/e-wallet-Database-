@@ -1,94 +1,53 @@
-from contextlib import contextmanager
-
-from src.config.database.connection import get_db_connection
-from src.container import build_controllers
-from src.modules.admin.admin_controller import AdminController
-from src.modules.admin.admin_repository import AdminRepository
-from src.modules.admin.admin_service import AdminService
-
+"""HTTP client for the REST API. The desktop app does not access DB/services directly."""
+import json
+import os
+import urllib.error
+import urllib.request
 
 class Api:
-    """Bridge the GUI to application controllers; SQL stays in repositories."""
+    def __init__(self):
+        self.base_url = os.getenv("EWALLET_API_URL", "http://127.0.0.1:8000").rstrip("/")
+        self.token = None
 
-    @contextmanager
-    def _controllers(self):
-        conn = get_db_connection()
+    def _request(self, operation, **payload):
+        data = json.dumps(payload).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.token: headers["Authorization"] = "Bearer " + self.token
+        request = urllib.request.Request(f"{self.base_url}/api/{operation}", data=data, headers=headers, method="POST")
         try:
-            controllers = build_controllers(conn)
-            audit_service = controllers.audit.audit_service
-            admin_service = AdminService(
-                AdminRepository(conn),
-                controllers.wallets.wallet_service.wallet_repo,
-                controllers.transactions.transaction_service.tx_repo,
-                controllers.audit.audit_service.audit_repo,
-                audit_service,
-            )
-            yield controllers, AdminController(admin_service)
-        finally:
-            conn.close()
-
-    def _call(self, callback):
-        with self._controllers() as (controllers, admin):
-            return callback(controllers, admin)
+            with urllib.request.urlopen(request, timeout=30) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try: detail = json.loads(exc.read().decode("utf-8")).get("detail", "Request failed")
+            except Exception: detail = "Request failed"
+            if isinstance(detail, dict): detail = detail.get("message", detail)
+            raise RuntimeError(str(detail)) from exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise RuntimeError(f"Cannot connect to REST API at {self.base_url}. Start the API server first.") from exc
+        return result
 
     def login(self, phone, password):
-        return self._call(lambda c, a: c.users.login(phone, password))
-
-    def register(self, name, password, email, phone, currency):
-        return self._call(lambda c, a: c.users.register(name, password, email, phone, currency))
-
+        result = self._request("login", phone=phone, password=password)
+        self.token = result["access_token"]
+        return result["user"]
+    def register(self, name, password, email, phone, currency): return self._request("register", name=name, password=password, email=email, phone=phone, currency=currency)["user_id"]
     def logout(self, user_id):
-        return self._call(lambda c, a: c.users.logout(user_id))
-
-    def profile(self, user_id):
-        return self._call(lambda c, a: c.users.get_user_by_id(user_id))
-
-    def update_profile(self, user_id, name, email, phone):
-        return self._call(lambda c, a: c.users.update_profile(user_id, name, email, phone))
-
-    def change_password(self, user_id, old_password, new_password):
-        return self._call(lambda c, a: c.users.change_password(user_id, old_password, new_password))
-
-    def wallets(self, user_id):
-        return self._call(lambda c, a: c.wallets.list_wallets(user_id))
-
-    def create_wallet(self, user_id, currency):
-        return self._call(lambda c, a: c.wallets.create_wallet(user_id, currency))
-
-    def set_wallet_locked(self, user_id, wallet_id, locked):
-        method = lambda c, a: c.wallets.lock_wallet(user_id, wallet_id) if locked else c.wallets.unlock_wallet(user_id, wallet_id)
-        return self._call(method)
-
-    def deposit(self, user_id, wallet_id, amount):
-        return self._call(lambda c, a: c.transactions.deposit(user_id, wallet_id, amount))
-
-    def withdraw(self, user_id, wallet_id, amount):
-        return self._call(lambda c, a: c.transactions.withdraw(user_id, wallet_id, amount))
-
-    def transfer(self, user_id, sender_id, receiver_id, amount):
-        return self._call(lambda c, a: c.transactions.transfer(user_id, sender_id, receiver_id, amount))
-
-    def history(self, user_id, tx_type=None, status=None, limit=100):
-        return self._call(lambda c, a: c.transactions.history(user_id, tx_type, status, limit))
-
-    def transaction_detail(self, user_id, transaction_id):
-        return self._call(lambda c, a: c.transactions.transaction_detail(user_id, transaction_id))
-
-    def activity(self, user_id, action=None, limit=100):
-        return self._call(lambda c, a: c.audit.get_activity(user_id, action, limit))
-
-    def admin_users(self, user_id):
-        return self._call(lambda c, a: a.list_users(user_id))
-
-    def admin_wallets(self, user_id):
-        return self._call(lambda c, a: a.list_wallets(user_id))
-
-    def admin_set_wallet_locked(self, admin_id, wallet_id, locked):
-        method = lambda c, a: a.lock_wallet(admin_id, wallet_id) if locked else a.unlock_wallet(admin_id, wallet_id)
-        return self._call(method)
-
-    def admin_transactions(self, user_id, tx_type=None, status=None):
-        return self._call(lambda c, a: a.list_transactions(user_id, tx_type, status))
-
-    def admin_audit_logs(self, user_id, action=None):
-        return self._call(lambda c, a: a.list_audit_logs(user_id, action=action))
+        try: return self._request("logout")
+        finally: self.token = None
+    def profile(self, user_id): return self._request("profile")
+    def update_profile(self, user_id, name, email, phone): return self._request("update_profile", name=name, email=email, phone=phone)
+    def change_password(self, user_id, old_password, new_password): return self._request("change_password", old_password=old_password, new_password=new_password)
+    def wallets(self, user_id): return self._request("wallets")
+    def create_wallet(self, user_id, currency): return self._request("create_wallet", currency=currency)
+    def set_wallet_locked(self, user_id, wallet_id, locked): return self._request("set_wallet_locked", wallet_id=wallet_id, locked=locked)
+    def deposit(self, user_id, wallet_id, amount): return self._request("deposit", wallet_id=wallet_id, amount=amount)
+    def withdraw(self, user_id, wallet_id, amount): return self._request("withdraw", wallet_id=wallet_id, amount=amount)
+    def transfer(self, user_id, sender_id, receiver_id, amount): return self._request("transfer", sender_id=sender_id, receiver_id=receiver_id, amount=amount)
+    def history(self, user_id, tx_type=None, status=None, limit=100): return self._request("history", tx_type=tx_type, status=status, limit=limit)
+    def transaction_detail(self, user_id, transaction_id): return self._request("transaction_detail", transaction_id=transaction_id)
+    def activity(self, user_id, action=None, limit=100): return self._request("activity", action=action, limit=limit)
+    def admin_users(self, user_id): return self._request("admin_users")
+    def admin_wallets(self, user_id): return self._request("admin_wallets")
+    def admin_set_wallet_locked(self, admin_id, wallet_id, locked): return self._request("admin_set_wallet_locked", wallet_id=wallet_id, locked=locked)
+    def admin_transactions(self, user_id, tx_type=None, status=None): return self._request("admin_transactions", tx_type=tx_type, status=status)
+    def admin_audit_logs(self, user_id, action=None): return self._request("admin_audit_logs", action=action)

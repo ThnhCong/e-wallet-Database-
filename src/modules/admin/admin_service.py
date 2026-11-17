@@ -2,8 +2,8 @@
 """Nghiep vu quan tri (bao cao 1.2.H): xem user, vi, giao dich, audit log; khoa / mo khoa vi cua bat ky ai.
 
 QUY TAC AN TOAN
-  * Moi ham cong khai cua AdminService PHAI co @admin_action. Decorator mo giao dich DB, doc role cua
-    admin_id TU DATABASE (khong tin du lieu phia GUI), roi moi chay ham. Day la diem kiem tra quyen duy nhat.
+  * Moi ham cong khai cua AdminService PHAI co @admin_action. Decorator mo giao dich DB, kiem tra admin_id theo danh sach admin_accounts
+    trong config server-side, roi moi chay ham. Day la diem kiem tra quyen duy nhat.
   * Audit log cua thao tac ghi nam cung giao dich: thao tac loi thi log cung rollback.
   * Khoa / mo khoa vi ghi action LOCK_WALLET / UNLOCK_WALLET voi user_id = ADMIN (nguoi lam). Phan biet voi
     chu vi tu khoa bang cach so user_id cua log voi wallets.user_id.
@@ -15,8 +15,7 @@ from src.common.errors import ServiceError
 from src.common.query_params import DEFAULT_ADMIN_LIMIT, normalize_limit, parse_optional_id
 from src.common.validators import TX_STATUSES, TX_TYPES, parse_choice, parse_id
 from src.modules.audit_logs.audit_actions import AUDIT_ACTIONS, AuditAction
-
-ROLE_ADMIN = "admin"
+from src.config.settings import get_settings
 
 
 def admin_action(operation):
@@ -43,8 +42,8 @@ class AdminService:
         self.conn = admin_repository.conn
 
     def _require_admin(self, admin_id):
-        role = self.admin_repo.get_role(admin_id)
-        if role is None or str(role).lower() != ROLE_ADMIN:
+        admin_accounts = get_settings().get("admin_accounts", [])
+        if not self.admin_repo.is_admin(admin_id, admin_accounts):
             raise ServiceError("FORBIDDEN", "Administrator access is required.")
 
     # ---------------------------------------------------------------- xem

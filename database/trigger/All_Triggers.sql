@@ -10,6 +10,7 @@ BEGIN
     SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Transactions cannot be deleted';
 END$$
+DELIMITER ;
 
 
 -- Prevent_Wallet_Deletion_with_Transaction_History
@@ -28,6 +29,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Wallet with transaction history cannot be deleted';
     END IF;
 END$$
+DELIMITER ;
 
 
 -- Protect_Audit_Logs
@@ -81,6 +83,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Only the status of a transaction can be changed';
     END IF;
 END$$
+DELIMITER ;
 
 
 -- Protect_Wallet_Balance
@@ -101,6 +104,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Balance can only be changed by a successful transaction';
     END IF;
 END$$
+DELIMITER ;
 
 
 -- Reset_Weekly_Limit

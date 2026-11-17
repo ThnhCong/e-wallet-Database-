@@ -24,3 +24,4 @@ BEGIN
             SET MESSAGE_TEXT = 'Only the status of a transaction can be changed';
     END IF;
 END$$
+DELIMITER ;

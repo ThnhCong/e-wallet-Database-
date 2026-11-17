@@ -6,7 +6,7 @@ Cai dat:  pip install PyMySQL
 
 Chay (bang tai khoan ADMIN, tren DB test):
     python test_triggers.py --user root --password 123456
-    python test_triggers.py --user root --password 123456 --client-user Tina514160 --client-password '...'
+    python test_triggers.py --user root --password 123456 --client-user ewallet_app --client-password '...' 
     python test_triggers.py --skip-concurrency
 Co the dung bien moi truong DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME.
 
@@ -16,12 +16,16 @@ LUU Y: transactions / audit_logs khong the DELETE (do trigger bao ve) nen du lie
 import argparse
 import os
 import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import threading
 import uuid
 from decimal import Decimal
 
 import pymysql
 from pymysql import err as mysql_errors
+
+from src.config.settings import get_settings
 
 CFG = {}
 ARGS = None
@@ -648,11 +652,12 @@ def test_concurrency(conn, ctx, iterations=30):
 def main():
     global ARGS
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default=os.getenv("DB_HOST", "127.0.0.1"))
-    ap.add_argument("--port", type=int, default=int(os.getenv("DB_PORT", "3306")))
-    ap.add_argument("--user", default="Tina514160")
-    ap.add_argument("--password", default="514160")
-    ap.add_argument("--database", default=os.getenv("DB_NAME", "ewallet"))
+    db_cfg = get_settings()["database"]
+    ap.add_argument("--host", default=os.getenv("DB_HOST", db_cfg.get("host", "127.0.0.1")))
+    ap.add_argument("--port", type=int, default=int(os.getenv("DB_PORT", db_cfg.get("port", 3306))))
+    ap.add_argument("--user", default=os.getenv("DB_USER", db_cfg.get("user", "")))
+    ap.add_argument("--password", default=os.getenv("DB_PASSWORD", db_cfg.get("password", "")))
+    ap.add_argument("--database", default=os.getenv("DB_NAME", db_cfg.get("name", "ewallet")))
     ap.add_argument("--client-user", default=os.getenv("DB_CLIENT_USER", ""))
     ap.add_argument("--client-password", default=os.getenv("DB_CLIENT_PASSWORD", ""))
     ap.add_argument("--skip-concurrency", action="store_true")

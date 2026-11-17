@@ -1,38 +1,26 @@
 # src/modules/user/user_repository.py
-"""Chi chua SQL cua bang users."""
 from src.common.db import BaseRepository
 
 
 class UserRepository(BaseRepository):
-
     def create_user(self, user_name, password_hash, email, phone):
-        with self.cursor() as cur:
-            cur.execute("INSERT INTO users (user_name, password_hash, email, phone) VALUES (%s,%s,%s,%s)",
-                        (user_name, password_hash, email, phone))
-            return cur.lastrowid
+        rows = self.call("sp_user_create", (user_name, password_hash, email, phone))
+        return rows[0]["user_id"]
 
     def get_user_by_phone(self, phone):
-        with self.cursor() as cur:
-            cur.execute("SELECT user_id, user_name, password_hash, email, phone, user_role FROM users WHERE phone=%s LIMIT 1",
-                        (phone,))
-            return cur.fetchone()
+        rows = self.call("sp_user_get_by_phone", (phone,))
+        return rows[0] if rows else None
 
     def get_user_with_hash(self, user_id):
-        with self.cursor() as cur:
-            cur.execute("SELECT user_id, user_name, password_hash, email, phone, user_role FROM users WHERE user_id=%s",
-                        (user_id,))
-            return cur.fetchone()
+        rows = self.call("sp_user_get_with_hash", (user_id,))
+        return rows[0] if rows else None
 
     def view_user_by_id(self, user_id):
-        with self.cursor() as cur:
-            cur.execute("SELECT user_id, user_name, email, phone, user_role FROM users WHERE user_id=%s LIMIT 1", (user_id,))
-            return cur.fetchone()
+        rows = self.call("sp_user_get_by_id", (user_id,))
+        return rows[0] if rows else None
 
     def update_profile(self, user_id, user_name, email, phone):
-        with self.cursor() as cur:
-            cur.execute("UPDATE users SET user_name=%s, email=%s, phone=%s WHERE user_id=%s",
-                        (user_name, email, phone, user_id))
+        self.call("sp_user_update_profile", (user_id, user_name, email, phone))
 
     def update_password_hash(self, user_id, password_hash):
-        with self.cursor() as cur:
-            cur.execute("UPDATE users SET password_hash=%s WHERE user_id=%s", (password_hash, user_id))
+        self.call("sp_user_update_password", (user_id, password_hash))

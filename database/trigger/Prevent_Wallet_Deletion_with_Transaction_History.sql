@@ -13,3 +13,4 @@ BEGIN
             SET MESSAGE_TEXT = 'Wallet with transaction history cannot be deleted';
     END IF;
 END$$
+DELIMITER ;

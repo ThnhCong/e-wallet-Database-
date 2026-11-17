@@ -8,7 +8,7 @@ class AdminUsersPage(Page):
         self.layout.addWidget(make_button("Refresh users", self.refresh))
         self.table = add_table(self, [
             ("User ID", "user_id"), ("Name", "user_name"), ("Email", "email"),
-            ("Phone", "phone"), ("Role", "user_role"), ("Wallets", "wallet_count"),
+            ("Phone", "phone"), ("Wallets", "wallet_count"),
         ])
 
     def refresh(self):

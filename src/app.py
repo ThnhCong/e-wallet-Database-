@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # de `import s
 
 from src.config.database.connection import get_db_connection   # noqa: E402
 from src.container import build_controllers                    # noqa: E402
+from src.config.settings import get_settings                    # noqa: E402
 
 logging.basicConfig(
     filename="ewallet.log",
@@ -307,7 +308,7 @@ def admin_users(admin):
     rows = run(lambda c: c.admin.list_users(admin["user_id"]))
     if rows is not None:
         table(rows, [("ID", "user_id"), ("Username", "user_name"), ("Email", "email"), ("Phone", "phone"),
-                     ("Role", "user_role"), ("Wallets", "wallet_count")])
+                     ("Wallets", "wallet_count")])
 
 
 def admin_wallets(admin):
@@ -438,7 +439,7 @@ def main():
                     print("Invalid choice.")
 
             else:
-                is_admin = str(user.get("user_role", "")).lower() == "admin"
+                is_admin = str(user.get("phone", "")) in get_settings().get("admin_accounts", [])
                 print(USER_MENU.format(name=user["user_name"]) + ("\n14. Admin panel" if is_admin else ""))
                 choice = ask("Choose: ")
 

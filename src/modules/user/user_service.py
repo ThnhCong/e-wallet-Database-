@@ -6,8 +6,9 @@ from src.common.errors import ServiceError
 from src.common.security import hash_password, needs_rehash, verify_password
 from src.common.validators import (parse_currency, require_text, validate_email, validate_password, validate_phone)
 from src.modules.audit_logs.audit_actions import AuditAction
+from src.config.settings import get_settings
 
-_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone", "user_role")     # khong bao gio tra password_hash
+_PUBLIC_FIELDS = ("user_id", "user_name", "email", "phone")     # khong bao gio tra password_hash
 
 
 class UserService:
@@ -44,7 +45,8 @@ class UserService:
             if needs_rehash(user["password_hash"]):
                 self.user_repo.update_password_hash(user["user_id"], hash_password(password_input))
             self.audit.record(user["user_id"], AuditAction.LOGIN)
-        return {field: user[field] for field in _PUBLIC_FIELDS}
+        return {**{field: user[field] for field in _PUBLIC_FIELDS},
+                "is_admin": str(user["phone"]) in get_settings().get("admin_accounts", [])}
 
     def logout(self, user_id):
         with db_transaction(self.conn, "Logout"):

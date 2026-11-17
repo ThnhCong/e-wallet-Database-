@@ -15,12 +15,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     phone VARCHAR(20) NOT NULL,
-    user_role VARCHAR(20) NOT NULL DEFAULT 'user',
     PRIMARY KEY (user_id),
     CONSTRAINT uq_users_email UNIQUE (email),
     CONSTRAINT uq_users_phone UNIQUE (phone),
-    CONSTRAINT chk_users_email CHECK (email LIKE '%@%.%'),
-    CONSTRAINT chk_users_user_role CHECK (user_role IN ('user', 'admin'))
+    CONSTRAINT chk_users_email CHECK (email LIKE '%@%.%')
 ) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
  
 -- =========================================================
@@ -137,36 +135,3 @@ CREATE INDEX idx_audit_logs_transaction_id
 
 CREATE INDEX idx_audit_logs_created_at
     ON audit_logs(created_at);
-
--- =========================================================
--- 6. CREATE USER FOR CLIENTS
--- =========================================================
--- 1. Create user
-CREATE USER IF NOT EXISTS 'Tina514160'@'%' 
-IDENTIFIED BY '514160';
-ALTER USER 'Tina514160'@'%'
-IDENTIFIED BY '514160';
-
--- 2. Remove all previously granted permissions
-REVOKE ALL PRIVILEGES, GRANT OPTION
-FROM 'Tina514160'@'%';
-
--- 3. Grant CRUD for table clients
-GRANT SELECT, INSERT, UPDATE
-ON ewallet.users
-TO 'Tina514160'@'%';
-
-GRANT SELECT, INSERT, UPDATE
-ON ewallet.wallets
-TO 'Tina514160'@'%';
-
-GRANT SELECT, INSERT, UPDATE
-ON ewallet.transactions
-TO 'Tina514160'@'%';
-
-GRANT SELECT, INSERT
-ON ewallet.audit_logs
-TO 'Tina514160'@'%';
-
--- 4. ReCheck these granted permissions
-SHOW GRANTS FOR 'Tina514160'@'%';

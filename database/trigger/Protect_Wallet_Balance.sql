@@ -15,3 +15,4 @@ BEGIN
             SET MESSAGE_TEXT = 'Balance can only be changed by a successful transaction';
     END IF;
 END$$
+DELIMITER ;

@@ -13,7 +13,7 @@ from PySide6.QtGui import QColor, QFont
 
 
 class LoginFrame(QWidget):
-    def __init__(self, user="Tina514160", pw="514160", on_login_success=None):
+    def __init__(self, user=None, pw=None, on_login_success=None):
         super().__init__()
         self.user = user
         self.pw = pw
