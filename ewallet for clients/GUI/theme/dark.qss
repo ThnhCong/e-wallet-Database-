@@ -1,0 +1,18 @@
+QWidget { color: #E6ECF5; font-family: "Segoe UI"; font-size: 13px; }
+QMainWindow, QStackedWidget { background: #111827; }
+QLabel#PageTitle { font-size: 25px; font-weight: 700; color: #F8FAFC; }
+QLabel#MutedLabel { color: #A4B0C3; }
+QLabel#Brand { color: #FFFFFF; font-size: 20px; font-weight: 800; }
+QLabel#AuthTitle { font-size: 26px; font-weight: 700; }
+QLabel#MetricValue { font-size: 22px; font-weight: 700; color: #F8FAFC; }
+QFrame#Sidebar { background: #080F1D; border: none; }
+QFrame#AuthCard, QFrame#BalanceCard { background: #1F2937; border: 1px solid #374151; border-radius: 14px; }
+QPushButton#PrimaryButton { background: #3B82F6; color: white; }
+QPushButton#SecondaryButton { background: #374151; color: #F3F4F6; }
+QPushButton#DangerButton { background: #B91C1C; color: white; }
+QPushButton#TextButton { color: #93C5FD; background: transparent; }
+QPushButton#NavButton { text-align: left; color: #D8E2F2; background: transparent; padding: 11px 12px; }
+QPushButton#NavButton:hover { background: #263956; }
+QLineEdit, QComboBox, QDoubleSpinBox { background: #111827; border: 1px solid #4B5563; border-radius: 8px; padding: 8px 10px; }
+QTableWidget { background: #1F2937; alternate-background-color: #273449; border: 1px solid #374151; gridline-color: #374151; }
+QHeaderView::section { background: #374151; border: none; padding: 10px; font-weight: 700; }
