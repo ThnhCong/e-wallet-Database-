@@ -25,26 +25,26 @@ class BankPage(Page):
         ])
 
     def refresh(self):
-        try:
-            wallets = self.api.wallets(self.state.user_id)
-            banks = self.api.banks()
-            self.wallet.clear()
-            for w in wallets:
-                self.wallet.addItem(f"Wallet #{w['wallet_id']} · {w['currency']} · {w['status']}", w['wallet_id'])
-            self.bank.clear()
-            for b in banks:
-                self.bank.addItem(b['name'], b['bank_id'])
-            self.table.set_rows(self.api.bank_accounts(self.state.user_id))
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.bank_page_data, self.state.user_id, on_success=self._render_bank_data)
 
+    def _render_bank_data(self, data):
+        self.wallet.clear()
+        for w in data.get("wallets", []):
+            self.wallet.addItem(f"Wallet #{w['wallet_id']} · {w['currency']} · {w['status']}", w['wallet_id'])
+        self.bank.clear()
+        for b in data.get("banks", []):
+            self.bank.addItem(b['name'], b['bank_id'])
+        self.table.set_rows(data.get("bank_accounts") or [])
     def link_bank(self):
-        try:
-            wallet_id, bank_id = self.wallet.currentData(), self.bank.currentData()
-            if wallet_id is None or bank_id is None:
-                raise ValueError("Choose a wallet and a partner bank first.")
-            result = self.api.link_bank(self.state.user_id, wallet_id, bank_id)
-            notify(self, "Bank connected", f"{result.get('bank_name', 'Partner bank')} connected to wallet #{wallet_id}. Reference: {result.get('bank_account_id', '—')}")
-            self.refresh()
-        except Exception as error:
-            self.show_error(error)
+        wallet_id, bank_id = self.wallet.currentData(), self.bank.currentData()
+        if wallet_id is None or bank_id is None:
+            self.show_error("Choose a wallet and a partner bank first.")
+            return
+        self.run_api(
+            self.api.link_bank, self.state.user_id, wallet_id, bank_id,
+            write=True, on_success=lambda result: self._bank_linked(result, wallet_id),
+        )
+
+    def _bank_linked(self, result, wallet_id):
+        notify(self, "Bank connected", f"{result.get('bank_name', 'Partner bank')} connected to wallet #{wallet_id}. Reference: {result.get('bank_account_id', '—')}")
+        self.refresh()

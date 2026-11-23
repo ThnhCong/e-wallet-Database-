@@ -25,6 +25,8 @@ class AdminAuditLogsPage(Page):
         try:
             raw = self.user_filter.text().strip()
             target_user_id = int(raw) if raw else None
-            self.table.set_rows(self.api.admin_audit_logs(self.state.user_id, self.action.currentData(), target_user_id))
-        except Exception as error:
-            self.show_error(error)
+        except ValueError:
+            self.show_error("User ID must be a valid integer.")
+            return
+        self.run_api(self.api.admin_audit_logs, self.state.user_id, self.action.currentData(), target_user_id,
+                     on_success=self.table.set_rows)

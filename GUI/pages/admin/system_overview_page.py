@@ -27,10 +27,10 @@ class AdminOverviewPage(Page):
         self.layout.addStretch()
 
     def refresh(self):
-        try:
-            data = self.api.admin_system_statistics(self.state.user_id)
-            for key, card in self.cards.items(): card.set_value(data.get(key, 0))
-            self.vnd.setText(f"VND · Successful deposit volume     {float(data.get('deposit_volume_vnd') or 0):,.2f} VND")
-            self.usd.setText(f"USD · Successful deposit volume     {float(data.get('deposit_volume_usd') or 0):,.2f} USD")
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.admin_system_statistics, self.state.user_id, on_success=self._render_statistics)
+
+    def _render_statistics(self, data):
+        for key, card in self.cards.items():
+            card.set_value(data.get(key, 0))
+        self.vnd.setText(f"VND · Successful deposit volume     {float(data.get('deposit_volume_vnd') or 0):,.2f} VND")
+        self.usd.setText(f"USD · Successful deposit volume     {float(data.get('deposit_volume_usd') or 0):,.2f} USD")

@@ -18,25 +18,22 @@ class PersonalDetailsPage(Page):
         self.layout.addStretch()
 
     def refresh(self):
-        try:
-            profile = self.api.user_profile(self.state.user_id)
-            if not profile:
-                return
-            self.age.setValue(int(profile.get("age") or 1))
-            self.sex.setCurrentText(profile.get("sex") or "OTHER")
-            self.address.setText(profile.get("address") or "")
-            self.job.setText(profile.get("job") or "")
-            self.country.setText(profile.get("country") or "")
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.user_profile, self.state.user_id, on_success=self._load_personal_profile)
 
+    def _load_personal_profile(self, profile):
+        if not profile:
+            return
+        self.age.setValue(int(profile.get("age") or 1))
+        self.sex.setCurrentText(profile.get("sex") or "OTHER")
+        self.address.setText(profile.get("address") or "")
+        self.job.setText(profile.get("job") or "")
+        self.country.setText(profile.get("country") or "")
     def save(self):
-        try:
-            profile = self.api.save_user_profile(self.state.user_id, self.age.value(), self.sex.currentText(),
-                                                 self.address.text().strip(), self.job.text().strip(),
-                                                 self.country.text().strip())
-            notify(self, "Profile saved", "Your personal details have been updated.")
-            if isinstance(profile, dict):
-                self.refresh()
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.save_user_profile, self.state.user_id, self.age.value(), self.sex.currentText(),
+                     self.address.text().strip(), self.job.text().strip(), self.country.text().strip(),
+                     write=True, on_success=self._personal_profile_saved)
+
+    def _personal_profile_saved(self, profile):
+        notify(self, "Profile saved", "Your personal details have been updated.")
+        if isinstance(profile, dict):
+            self.refresh()

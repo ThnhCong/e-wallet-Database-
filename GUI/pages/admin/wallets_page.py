@@ -25,10 +25,10 @@ class AdminWalletsPage(Page):
         try:
             raw = self.owner_filter.text().strip()
             owner_id = int(raw) if raw else None
-            self.table.set_rows(self.api.admin_wallets(self.state.user_id, owner_id))
-        except Exception as error:
-            self.show_error(error)
-
+        except ValueError:
+            self.show_error("Customer user ID must be a valid integer.")
+            return
+        self.run_api(self.api.admin_wallets, self.state.user_id, owner_id, on_success=self.table.set_rows)
     def set_locked(self, locked):
         row = self.table.currentRow()
         if row < 0:
@@ -38,9 +38,9 @@ class AdminWalletsPage(Page):
         action = "lock" if locked else "unlock"
         if not confirm(self, f"{action.title()} wallet", f"Are you sure you want to {action} wallet #{wallet_id}?"):
             return
-        try:
-            self.api.admin_set_wallet_locked(self.state.user_id, wallet_id, locked)
-            notify(self, "Wallet updated", f"Wallet #{wallet_id} is now {'LOCKED' if locked else 'ACTIVE'}.")
-            self.refresh()
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.admin_set_wallet_locked, self.state.user_id, wallet_id, locked,
+                     write=True, on_success=lambda _result: self._wallet_status_changed(wallet_id, locked))
+
+    def _wallet_status_changed(self, wallet_id, locked):
+        notify(self, "Wallet updated", f"Wallet #{wallet_id} is now {'LOCKED' if locked else 'ACTIVE'}.")
+        self.refresh()

@@ -102,51 +102,39 @@ class AdminUserProfilePage(Page):
             self.refresh()
 
     def refresh(self):
-        try:
-            result = self.api.admin_user_profiles(
-                self.state.user_id,
-                page=self.page,
-                page_size=int(self.page_size.currentText()),
-                search=self.search.text().strip() or None,
-                sex=self.sex_filter.currentData(),
-                country=self.country_filter.text().strip() or None,
-                sort_by=self.sort_by.currentData() or "created_at",
-                sort_order=self.sort_order.currentData() or "DESC",
-            )
-            result = result or {}
-            items = result.get("items") or []
-            self.total_records = int(result.get("total", 0) or 0)
-            self.total_pages = int(result.get("total_pages", 0) or 0)
-            self.page = int(result.get("page", self.page) or 1)
+        self.run_api(
+            self.api.admin_user_profiles,
+            self.state.user_id,
+            page=self.page,
+            page_size=int(self.page_size.currentText()),
+            search=self.search.text().strip() or None,
+            sex=self.sex_filter.currentData(),
+            country=self.country_filter.text().strip() or None,
+            sort_by=self.sort_by.currentData() or "created_at",
+            sort_order=self.sort_order.currentData() or "DESC",
+            on_success=self._render_profiles,
+        )
 
-            self.table.set_rows(items)
-            has_items = bool(items)
-            self.table.setVisible(has_items)
-            self.empty_label.setVisible(not has_items)
-
-            if not has_items:
-                has_active_filter = bool(
-                    self.search.text().strip()
-                    or self.sex_filter.currentData()
-                    or self.country_filter.text().strip()
-                )
-                if self.total_records == 0 and not has_active_filter:
-                    message = (
-                        "There are no customer profiles yet.\n"
-                        "Profiles will appear here once users complete their personal information."
-                    )
-                else:
-                    message = (
-                        "No matching customer profiles found.\n"
-                        "Try changing your search keyword or filters and try again."
-                    )
-                self.empty_label.setText(message)
-
-            self.result_label.setText(f"{self.total_records:,} profile record(s)")
-            self.page_label.setText(
-                f"Page {self.page} of {self.total_pages}" if self.total_pages else "Page 0 of 0"
-            )
-            self.prev_button.setEnabled(self.page > 1 and self.total_pages > 0)
-            self.next_button.setEnabled(self.page < self.total_pages)
-        except Exception as error:
-            self.show_error(error)
+    def _render_profiles(self, result):
+        result = result or {}
+        items = result.get("items") or []
+        self.total_records = int(result.get("total", 0) or 0)
+        self.total_pages = int(result.get("total_pages", 0) or 0)
+        self.page = int(result.get("page", self.page) or 1)
+        self.table.set_rows(items)
+        has_items = bool(items)
+        self.table.setVisible(has_items)
+        self.empty_label.setVisible(not has_items)
+        if not has_items:
+            has_active_filter = bool(self.search.text().strip() or self.sex_filter.currentData() or self.country_filter.text().strip())
+            if self.total_records == 0 and not has_active_filter:
+                message = ("There are no customer profiles yet.\n"
+                           "Profiles will appear here once users complete their personal information.")
+            else:
+                message = ("No matching customer profiles found.\n"
+                           "Try changing your search keyword or filters and try again.")
+            self.empty_label.setText(message)
+        self.result_label.setText(f"{self.total_records:,} profile record(s)")
+        self.page_label.setText(f"Page {self.page} of {self.total_pages}" if self.total_pages else "Page 0 of 0")
+        self.prev_button.setEnabled(self.page > 1 and self.total_pages > 0)
+        self.next_button.setEnabled(self.page < self.total_pages)

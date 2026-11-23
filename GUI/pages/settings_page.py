@@ -22,11 +22,11 @@ class SettingsPage(Page):
         if self.new.text() != self.confirm.text():
             self.show_error("The new passwords do not match.")
             return
-        try:
-            self.api.change_password(self.state.user_id, self.current.text(), self.new.text())
-            self.current.clear()
-            self.new.clear()
-            self.confirm.clear()
-            notify(self, "Password updated", "Your password has been changed.")
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.change_password, self.state.user_id, self.current.text(), self.new.text(),
+                     write=True, on_success=self._password_changed)
+
+    def _password_changed(self, _result):
+        self.current.clear()
+        self.new.clear()
+        self.confirm.clear()
+        notify(self, "Password updated", "Your password has been changed.")

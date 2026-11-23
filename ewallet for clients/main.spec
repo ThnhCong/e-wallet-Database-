@@ -1,3 +1,5 @@
+from PyInstaller.utils.hooks import collect_submodules
+
 # -*- mode: python ; coding: utf-8 -*-
 
 
@@ -5,8 +7,8 @@ a = Analysis(
     ['GUI/main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('GUI/theme/light.qss', 'GUI/theme'), ('GUI/theme/dark.qss', 'GUI/theme')],
-    hiddenimports=[],
+    datas=[('GUI/theme/light.qss', 'GUI/theme'), ('GUI/theme/dark.qss', 'GUI/theme'), ('client_config.json', '.')],
+    hiddenimports=collect_submodules("httpx") + collect_submodules("httpcore") + collect_submodules("h2"),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

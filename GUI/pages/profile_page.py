@@ -13,18 +13,16 @@ class ProfilePage(Page):
         self.layout.addStretch()
 
     def refresh(self):
-        try:
-            user = self.api.profile(self.state.user_id)
-            self.name.setText(user["user_name"])
-            self.email.setText(user["email"])
-            self.phone.setText(user["phone"])
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.profile, self.state.user_id, on_success=self._load_profile)
 
+    def _load_profile(self, user):
+        self.name.setText(user["user_name"])
+        self.email.setText(user["email"])
+        self.phone.setText(user["phone"])
     def save(self):
-        try:
-            user = self.api.update_profile(self.state.user_id, self.name.text(), self.email.text(), self.phone.text())
-            self.state.user.update(user)
-            notify(self, "Profile updated", "Your profile has been saved.")
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.update_profile, self.state.user_id, self.name.text(), self.email.text(), self.phone.text(),
+                     write=True, on_success=self._profile_saved)
+
+    def _profile_saved(self, user):
+        self.state.user.update(user)
+        notify(self, "Profile updated", "Your profile has been saved.")

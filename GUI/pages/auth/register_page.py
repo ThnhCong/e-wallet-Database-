@@ -24,10 +24,19 @@ class RegisterPage(Page):
         self.layout.addStretch()
 
     def submit(self):
-        try:
-            user_id = self.api.register(self.name.text(), self.password.text(), self.email.text(),
-                                        self.phone.text(), self.currency.currentText())
-            notify(self, "Account created", f"Your account ID is {user_id}. You can now sign in.")
-            self.on_registered()
-        except Exception as error:
-            notify(self, "Registration failed", error, True)
+        self.setEnabled(False)
+        def registration_succeeded(user_id):
+            self.setEnabled(True)
+            self._registration_complete(user_id)
+        def registration_failed(message):
+            self.setEnabled(True)
+            notify(self, "Registration failed", message, True)
+        self.api.run_async(
+            self.api.register, self.name.text(), self.password.text(), self.email.text(),
+            self.phone.text(), self.currency.currentText(),
+            on_success=registration_succeeded, on_error=registration_failed,
+        )
+
+    def _registration_complete(self, user_id):
+        notify(self, "Account created", f"Your account ID is {user_id}. You can now sign in.")
+        self.on_registered()

@@ -25,13 +25,12 @@ class StatisticsPage(Page):
         ])
 
     def refresh(self):
-        try:
-            start = self.date_from.text().strip() or None
-            end = self.date_to.text().strip() or None
-            rows = self.api.statistics(self.state.user_id, start, end)
-            self.table.set_rows(rows)
-            self.wallets.set_value(sum(int(r.get("wallet_count") or 0) for r in rows))
-            self.success.set_value(sum(int(r.get("success_count") or 0) for r in rows))
-            self.failed.set_value(sum(int(r.get("fail_count") or 0) for r in rows))
-        except Exception as error:
-            self.show_error(error)
+        start = self.date_from.text().strip() or None
+        end = self.date_to.text().strip() or None
+        self.run_api(self.api.statistics, self.state.user_id, start, end, on_success=self._render_statistics)
+
+    def _render_statistics(self, rows):
+        self.table.set_rows(rows)
+        self.wallets.set_value(sum(int(r.get("wallet_count") or 0) for r in rows))
+        self.success.set_value(sum(int(r.get("success_count") or 0) for r in rows))
+        self.failed.set_value(sum(int(r.get("fail_count") or 0) for r in rows))

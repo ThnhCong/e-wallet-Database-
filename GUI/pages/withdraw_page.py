@@ -14,23 +14,25 @@ class WithdrawPage(Page):
         self.layout.addStretch()
 
     def refresh(self):
-        try:
-            self.wallet.clear()
-            for w in self.api.wallets(self.state.user_id):
-                self.wallet.addItem(f"#{w['wallet_id']} · {w['currency']} · {w['status']}", w["wallet_id"])
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.wallets, self.state.user_id, on_success=self._set_wallets)
 
+    def _set_wallets(self, wallets):
+        self.wallet.clear()
+        for w in wallets:
+            self.wallet.addItem(f"#{w['wallet_id']} · {w['currency']} · {w['status']}", w["wallet_id"])
     def submit(self):
-        try:
-            wallet_id = self.wallet.currentData()
-            if self.amount.value() <= 0:
-                raise ValueError("The amount must be greater than 0.")
-            if wallet_id is None:
-                raise ValueError("Create or select a wallet first.")
-            result = self.api.withdraw(self.state.user_id, wallet_id, self.amount.value())
-            notify(self, "Withdrawal complete", f"Transaction #{result['transaction_id']} succeeded. Balance: {result['balance']}.")
-            self.refresh()
-            self.amount.setValue(0)
-        except Exception as error:
-            self.show_error(error)
+        wallet_id = self.wallet.currentData()
+        amount = self.amount.value()
+        if amount <= 0:
+            self.show_error("The amount must be greater than 0.")
+            return
+        if wallet_id is None:
+            self.show_error("Create or select a wallet first.")
+            return
+        self.run_api(self.api.withdraw, self.state.user_id, wallet_id, amount,
+                     write=True, on_success=self._withdraw_complete)
+
+    def _withdraw_complete(self, result):
+        notify(self, "Withdrawal complete", f"Transaction #{result['transaction_id']} succeeded. Balance: {result['balance']}.")
+        self.amount.setValue(0)
+        self.refresh()

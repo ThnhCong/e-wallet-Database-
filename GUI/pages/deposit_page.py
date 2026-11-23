@@ -16,24 +16,26 @@ class DepositPage(Page):
         self.layout.addStretch()
 
     def refresh(self):
-        try:
-            wallets = self.api.wallets(self.state.user_id)
-            self.wallet.clear()
-            for wallet in wallets:
-                self.wallet.addItem(f"#{wallet['wallet_id']} · {wallet['currency']} · {wallet['status']}", wallet["wallet_id"])
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.wallets, self.state.user_id, on_success=self._set_wallets)
 
+    def _set_wallets(self, wallets):
+        self.wallet.clear()
+        for wallet in wallets:
+            self.wallet.addItem(f"#{wallet['wallet_id']} · {wallet['currency']} · {wallet['status']}", wallet["wallet_id"])
     def submit(self):
-        try:
-            wallet_id = self.wallet.currentData()
-            if self.amount.value() <= 0:
-                raise ValueError("The amount must be greater than 0.")
-            if wallet_id is None:
-                raise ValueError("Create or select a wallet first.")
-            result = self.api.deposit(self.state.user_id, wallet_id, self.amount.value())
-            notify(self, "Deposit complete", f"Transaction #{result['transaction_id']} succeeded. New balance: {result['balance']} {self.wallet.currentText().split('·')[1].strip()}.")
-            self.refresh()
-            self.amount.setValue(0)
-        except Exception as error:
-            self.show_error(error)
+        wallet_id = self.wallet.currentData()
+        amount = self.amount.value()
+        if amount <= 0:
+            self.show_error("The amount must be greater than 0.")
+            return
+        if wallet_id is None:
+            self.show_error("Create or select a wallet first.")
+            return
+        currency = self.wallet.currentText().split('·')[1].strip()
+        self.run_api(self.api.deposit, self.state.user_id, wallet_id, amount,
+                     write=True, on_success=lambda result: self._deposit_complete(result, currency))
+
+    def _deposit_complete(self, result, currency):
+        notify(self, "Deposit complete", f"Transaction #{result['transaction_id']} succeeded. New balance: {result['balance']} {currency}.")
+        self.amount.setValue(0)
+        self.refresh()

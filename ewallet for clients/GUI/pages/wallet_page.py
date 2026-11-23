@@ -27,11 +27,7 @@ class WalletPage(Page):
         self.layout.addLayout(actions)
 
     def refresh(self):
-        try:
-            self.table.set_rows(self.api.wallets(self.state.user_id))
-        except Exception as error:
-            self.show_error(error)
-
+        self.run_api(self.api.wallets, self.state.user_id, on_success=self.table.set_rows)
     def selected_wallet(self):
         row = self.table.currentRow()
         if row < 0:
@@ -39,20 +35,20 @@ class WalletPage(Page):
         return int(self.table.item(row, 0).text())
 
     def create_wallet(self):
-        try:
-            wallet = self.api.create_wallet(self.state.user_id, self.currency.currentText())
-            notify(self, "Wallet created", f"Wallet #{wallet['wallet_id']} created successfully.")
-            self.refresh()
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.create_wallet, self.state.user_id, self.currency.currentText(),
+                     write=True, on_success=self._wallet_created)
 
+    def _wallet_created(self, wallet):
+        notify(self, "Wallet created", f"Wallet #{wallet['wallet_id']} created successfully.")
+        self.refresh()
     def set_locked(self, locked):
         try:
             wallet_id = self.selected_wallet()
-            action = "lock" if locked else "unlock"
-            if not confirm(self, f"{action.title()} wallet", f"Are you sure you want to {action} wallet #{wallet_id}?"):
-                return
-            self.api.set_wallet_locked(self.state.user_id, wallet_id, locked)
-            self.refresh()
         except Exception as error:
             self.show_error(error)
+            return
+        action = "lock" if locked else "unlock"
+        if not confirm(self, f"{action.title()} wallet", f"Are you sure you want to {action} wallet #{wallet_id}?"):
+            return
+        self.run_api(self.api.set_wallet_locked, self.state.user_id, wallet_id, locked,
+                     write=True, on_success=lambda _result: self.refresh())

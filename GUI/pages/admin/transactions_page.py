@@ -20,18 +20,15 @@ class AdminTransactionsPage(Page):
 
     def show_detail(self):
         row = self.table.currentRow()
-        if row < 0: return
+        if row < 0:
+            return
         try:
             tx_id = int(self.table.item(row, 0).text())
-            detail = self.api.admin_transaction_detail(self.state.user_id, tx_id)
-            notify(self, f"Transaction #{tx_id}", "\n".join(f"{key}: {value}" for key, value in detail.items()))
-        except Exception as error:
-            self.show_error(error)
-
+        except (AttributeError, TypeError, ValueError):
+            self.show_error("The selected transaction is invalid.")
+            return
+        self.run_api(self.api.admin_transaction_detail, self.state.user_id, tx_id,
+                     on_success=lambda detail: notify(self, f"Transaction #{tx_id}", "\n".join(f"{key}: {value}" for key, value in detail.items())))
     def refresh(self):
-        try:
-            self.table.set_rows(self.api.admin_transactions(self.state.user_id,
-                                                           self.type_filter.currentData(),
-                                                           self.status_filter.currentData()))
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.admin_transactions, self.state.user_id, self.type_filter.currentData(),
+                     self.status_filter.currentData(), on_success=self.table.set_rows)

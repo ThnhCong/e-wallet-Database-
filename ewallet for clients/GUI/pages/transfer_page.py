@@ -15,32 +15,35 @@ class TransferPage(Page):
         self.layout.addStretch()
 
     def refresh(self):
-        try:
-            wallets = self.api.wallets(self.state.user_id)
-            self.sender.clear()
-            for w in wallets:
-                label = f"#{w['wallet_id']} · {w['currency']} · {w['status']}"
-                self.sender.addItem(label, w["wallet_id"])
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.wallets, self.state.user_id, on_success=self._set_wallets)
 
+    def _set_wallets(self, wallets):
+        self.sender.clear()
+        for w in wallets:
+            label = f"#{w['wallet_id']} · {w['currency']} · {w['status']}"
+            self.sender.addItem(label, w["wallet_id"])
     def submit(self):
+        sender_id = self.sender.currentData()
+        amount = self.amount.value()
+        receiver_text = self.receiver.text().strip()
+        if amount <= 0:
+            self.show_error("The amount must be greater than 0.")
+            return
+        if sender_id is None or not receiver_text:
+            self.show_error("Select a sender wallet and enter the receiver wallet ID.")
+            return
         try:
-            sender_id = self.sender.currentData()
-            if self.amount.value() <= 0:
-                raise ValueError("The amount must be greater than 0.")
-            receiver_text = self.receiver.text().strip()
-            if sender_id is None or not receiver_text:
-                raise ValueError("Select a sender wallet and enter the receiver wallet ID.")
-            try:
-                receiver_id = int(receiver_text)
-            except ValueError as error:
-                raise ValueError("Receiver wallet ID must be a positive integer.") from error
-            if receiver_id <= 0:
-                raise ValueError("Receiver wallet ID must be a positive integer.")
-            result = self.api.transfer(self.state.user_id, sender_id, receiver_id, self.amount.value())
-            notify(self, "Transfer complete", f"Transaction #{result['transaction_id']} succeeded.")
-            self.refresh()
-            self.amount.setValue(0)
-        except Exception as error:
-            self.show_error(error)
+            receiver_id = int(receiver_text)
+        except ValueError:
+            self.show_error("Receiver wallet ID must be a positive integer.")
+            return
+        if receiver_id <= 0:
+            self.show_error("Receiver wallet ID must be a positive integer.")
+            return
+        self.run_api(self.api.transfer, self.state.user_id, sender_id, receiver_id, amount,
+                     write=True, on_success=self._transfer_complete)
+
+    def _transfer_complete(self, result):
+        notify(self, "Transfer complete", f"Transaction #{result['transaction_id']} succeeded.")
+        self.amount.setValue(0)
+        self.refresh()

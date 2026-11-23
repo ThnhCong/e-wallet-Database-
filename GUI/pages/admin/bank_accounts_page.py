@@ -14,5 +14,4 @@ class AdminBankAccountsPage(Page):
         ])
 
     def refresh(self):
-        try: self.table.set_rows(self.api.admin_bank_accounts(self.state.user_id))
-        except Exception as error: self.show_error(error)
+        self.run_api(self.api.admin_bank_accounts, self.state.user_id, on_success=self.table.set_rows)

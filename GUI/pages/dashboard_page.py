@@ -32,20 +32,20 @@ class DashboardPage(Page):
         ])
 
     def refresh(self):
-        try:
-            wallets = self.api.wallets(self.state.user_id)
-            txs = self.api.history(self.state.user_id, limit=8)
-            total = {"VND": 0.0, "USD": 0.0}
-            active = 0
-            for wallet in wallets:
-                currency = wallet["currency"]
-                total[currency] = total.get(currency, 0.0) + float(wallet["balance"])
-                active += int(wallet.get("status") == "ACTIVE")
-            self.wallet_count.set_value(f"{active} / {len(wallets)}")
-            self.balance_vnd.set_value(money(total.get("VND", 0), "VND"))
-            self.balance_usd.set_value(money(total.get("USD", 0), "USD"))
-            self.tx_count.set_value(len(txs))
-            self.hero_title.setText(f"Welcome back, {self.state.user.get('user_name', 'there')}.")
-            self.table.set_rows(txs)
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.dashboard_summary, self.state.user_id, on_success=self._render_summary)
+
+    def _render_summary(self, data):
+        wallets = data.get("wallets") or []
+        txs = data.get("transactions") or []
+        total = {"VND": 0.0, "USD": 0.0}
+        active = 0
+        for wallet in wallets:
+            currency = wallet["currency"]
+            total[currency] = total.get(currency, 0.0) + float(wallet["balance"])
+            active += int(wallet.get("status") == "ACTIVE")
+        self.wallet_count.set_value(f"{active} / {len(wallets)}")
+        self.balance_vnd.set_value(money(total.get("VND", 0), "VND"))
+        self.balance_usd.set_value(money(total.get("USD", 0), "USD"))
+        self.tx_count.set_value(len(txs))
+        self.hero_title.setText(f"Welcome back, {self.state.user.get('user_name', 'there')}.")
+        self.table.set_rows(txs)

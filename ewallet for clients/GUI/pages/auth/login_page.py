@@ -43,8 +43,17 @@ class LoginPage(QWidget):
         self.form_navigation = FormNavigation(self, [self.phone, self.password], self.submit)
 
     def submit(self):
-        try:
-            user = self.api.login(self.phone.text().strip(), self.password.text())
+        phone = self.phone.text().strip()
+        password = self.password.text()
+        if not phone or not password:
+            notify(self, "Sign in failed", "Enter your phone number and password.", True)
+            return
+        self.setEnabled(False)
+        def login_succeeded(user):
+            self.setEnabled(True)
             self.on_login(user)
-        except Exception as error:
-            notify(self, "Sign in failed", error, True)
+        def login_failed(message):
+            self.setEnabled(True)
+            notify(self, "Sign in failed", message, True)
+        self.api.run_async(self.api.login, phone, password,
+                           on_success=login_succeeded, on_error=login_failed)

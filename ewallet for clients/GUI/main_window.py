@@ -64,7 +64,6 @@ class MainWindow(QMainWindow):
         self.root_pages.addWidget(self.register_page)
         self.root_pages.setCurrentWidget(self.login_page)
         self.workspace = None
-        self._api_version_warning_shown = False
 
     def open_login(self):
         self.root_pages.setCurrentWidget(self.login_page)
@@ -73,27 +72,6 @@ class MainWindow(QMainWindow):
         self.root_pages.setCurrentWidget(self.register_page)
 
     def open_workspace(self, user):
-        # Detect the common client/server mismatch before the user opens a page
-        # whose endpoint may not exist on an older, still-running API process.
-        if not self._api_version_warning_shown:
-            try:
-                server_info = self.api.health()
-                if server_info.get("api_version") != "1.3.0":
-                    notify(
-                        self,
-                        "API server needs updating",
-                        "The desktop app is newer than the REST API server. "
-                        "Some pages (including Personal details and the new Admin pages) "
-                        "may report 'Unknown API operation'. Update the SERVER source from "
-                        "this same ZIP, stop the old server, and restart it with:\n\n"
-                        "python -m uvicorn src.api:app --host 0.0.0.0 --port 8000",
-                        True,
-                    )
-                self._api_version_warning_shown = True
-            except Exception:
-                # Login already succeeded; leave the normal page-level error handling
-                # to report a transient health-check failure if an API call is made.
-                pass
         if self.workspace is not None:
             self.root_pages.removeWidget(self.workspace)
             self.workspace.deleteLater()
@@ -175,9 +153,8 @@ class MainWindow(QMainWindow):
             page.refresh()
 
     def logout(self):
-        try:
-            self.api.logout(self.state.user_id)
-        except Exception as error:
-            notify(self, "Sign out warning", error, True)
+        user_id = self.state.user_id
+        if user_id is not None:
+            self.api.run_async(self.api.logout, user_id, token_snapshot=self.api.token, on_error=lambda message: None)
         self.state.clear()
         self.root_pages.setCurrentWidget(self.login_page)

@@ -19,7 +19,5 @@ class ActivityPage(Page):
         ])
 
     def refresh(self):
-        try:
-            self.table.set_rows(self.api.activity(self.state.user_id, self.action.currentData(), 200))
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.activity, self.state.user_id, self.action.currentData(), 200,
+                     on_success=self.table.set_rows)

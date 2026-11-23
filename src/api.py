@@ -98,6 +98,14 @@ def run(operation, authorization=None, body=None):
             if operation == "admin_delete_partner_bank": return a.delete_partner_bank(uid, body.get("bank_id"))
             if operation == "admin_bank_statistics": return a.bank_statistics(uid)
             if operation == "admin_system_statistics": return a.system_statistics(uid)
+            # Composite read endpoints reduce Cloudflare round-trips on high-latency links.
+            if operation == "dashboard_summary":
+                return {"wallets": c.wallets.list_wallets(uid),
+                        "transactions": c.transactions.history(uid, None, None, 8)}
+            if operation == "bank_page_data":
+                return {"wallets": c.wallets.list_wallets(uid),
+                        "banks": c.banks.list_banks(),
+                        "bank_accounts": c.banks.list_my_links(uid)}
             raise HTTPException(404, "Unknown API operation.")
     except ServiceError as exc:
         code = getattr(exc, "code", "")
@@ -117,6 +125,7 @@ def health():
             "statistics", "admin_bank_accounts", "admin_partner_banks",
             "admin_create_partner_bank", "admin_delete_partner_bank", "admin_bank_statistics",
             "admin_system_statistics", "admin_transaction_detail", "admin_user_profiles",
+            "dashboard_summary", "bank_page_data",
         ],
     }
 
@@ -127,4 +136,4 @@ def api_operation(operation: str, body: dict = None, authorization: str | None =
 if __name__ == "__main__":
     import uvicorn
     api_cfg = get_settings()["api"]
-    uvicorn.run("src.api:app", host=api_cfg.get("host", "127.0.0.1"), port=int(api_cfg.get("port", 8000)), reload=False)
+    uvicorn.run("src.api:app", host=api_cfg.get("host", "127.0.0.1"), port=int(api_cfg.get("port", 8000)), reload=False, timeout_keep_alive=30)

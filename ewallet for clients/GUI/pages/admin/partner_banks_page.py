@@ -36,26 +36,22 @@ class AdminPartnerBanksPage(Page):
         self.layout.addLayout(actions)
 
     def refresh(self):
-        try:
-            self.table.set_rows(self.api.admin_partner_banks(self.state.user_id) or [])
-        except Exception as error:
-            self.show_error(error)
-
+        self.run_api(self.api.admin_partner_banks, self.state.user_id,
+                     on_success=lambda rows: self.table.set_rows(rows or []))
     def create_bank(self):
         name = self.bank_name.text().strip()
         if not name:
             self.show_error("Enter a partner bank name.")
             self.bank_name.setFocus()
             return
-        try:
-            result = self.api.admin_create_partner_bank(self.state.user_id, name)
-            bank_name = (result or {}).get("name", name)
-            self.bank_name.clear()
-            notify(self, "Partner bank added", f"{bank_name} is now available for customer bank linking.")
-            self.refresh()
-        except Exception as error:
-            self.show_error(error)
+        self.run_api(self.api.admin_create_partner_bank, self.state.user_id, name,
+                     write=True, on_success=lambda result: self._partner_bank_created(result, name))
 
+    def _partner_bank_created(self, result, fallback_name):
+        bank_name = (result or {}).get("name", fallback_name)
+        self.bank_name.clear()
+        notify(self, "Partner bank added", f"{bank_name} is now available for customer bank linking.")
+        self.refresh()
     def delete_bank(self):
         row = self.table.currentRow()
         if row < 0:
@@ -67,18 +63,13 @@ class AdminPartnerBanksPage(Page):
         except (AttributeError, TypeError, ValueError):
             self.show_error("The selected bank row is invalid. Refresh the list and try again.")
             return
-
-        if not confirm(
-            self,
-            "Delete partner bank",
-            f"Are you sure you want to delete {bank_name} (ID: {bank_id})?\n\n"
-            "A bank that already has customer links cannot be deleted.",
-        ):
+        if not confirm(self, "Delete partner bank",
+                       f"Are you sure you want to delete {bank_name} (ID: {bank_id})?\n\n"
+                       "A bank that already has customer links cannot be deleted."):
             return
+        self.run_api(self.api.admin_delete_partner_bank, self.state.user_id, bank_id,
+                     write=True, on_success=lambda _result: self._partner_bank_deleted(bank_name))
 
-        try:
-            self.api.admin_delete_partner_bank(self.state.user_id, bank_id)
-            notify(self, "Partner bank deleted", f"{bank_name} has been removed.")
-            self.refresh()
-        except Exception as error:
-            self.show_error(error)
+    def _partner_bank_deleted(self, bank_name):
+        notify(self, "Partner bank deleted", f"{bank_name} has been removed.")
+        self.refresh()

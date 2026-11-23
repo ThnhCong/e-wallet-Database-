@@ -22,19 +22,19 @@ class HistoryPage(Page):
     def refresh(self):
         try:
             limit = int(self.limit.text() or "100")
-            rows = self.api.history(self.state.user_id, self.type_filter.currentData(),
-                                    self.status_filter.currentData(), limit)
-            self.table.set_rows(rows)
-        except Exception as error:
-            self.show_error(error)
-
+        except ValueError:
+            self.show_error("Maximum rows must be a valid integer.")
+            return
+        self.run_api(self.api.history, self.state.user_id, self.type_filter.currentData(),
+                     self.status_filter.currentData(), limit, on_success=self.table.set_rows)
     def show_detail(self):
         row = self.table.currentRow()
         if row < 0:
             return
         try:
-            detail = self.api.transaction_detail(self.state.user_id, int(self.table.item(row, 0).text()))
-            text = "\n".join(f"{key}: {value}" for key, value in detail.items())
-            notify(self, "Transaction details", text)
-        except Exception as error:
-            self.show_error(error)
+            transaction_id = int(self.table.item(row, 0).text())
+        except (AttributeError, TypeError, ValueError):
+            self.show_error("The selected transaction is invalid.")
+            return
+        self.run_api(self.api.transaction_detail, self.state.user_id, transaction_id,
+                     on_success=lambda detail: notify(self, "Transaction details", "\n".join(f"{key}: {value}" for key, value in detail.items())))

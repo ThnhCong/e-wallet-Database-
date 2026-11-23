@@ -39,6 +39,31 @@ class Page(QWidget):
             hint.setWordWrap(True)
             self.layout.addWidget(hint)
         self._form_navigation = None
+        self._active_api_worker = None
+
+    def run_api(self, function, *args, on_success=None, write=False, **kwargs):
+        """Execute an API method in the background; callbacks return to the GUI thread.
+
+        Write actions temporarily disable the page to prevent accidental double-submit.
+        """
+        if write:
+            self.setEnabled(False)
+
+        def succeeded(value):
+            if write:
+                self.setEnabled(True)
+            if on_success:
+                on_success(value)
+
+        def failed(message):
+            if write:
+                self.setEnabled(True)
+            self.show_error(message)
+
+        self._active_api_worker = self.api.run_async(
+            function, *args, on_success=succeeded, on_error=failed, **kwargs
+        )
+        return self._active_api_worker
 
     def showEvent(self, event):
         super().showEvent(event)
