@@ -3,25 +3,10 @@ import json
 import os
 import urllib.error
 import urllib.request
-import sys
-
-from pathlib import Path
 
 class Api:
     def __init__(self):
-        if getattr(sys, "frozen", False):
-            config_path = Path(sys.executable).resolve().parent / "client_config.json"
-        else:
-            config_path = Path(__file__).resolve().parents[2] / "client_config.json"
-
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-
-        self.base_url = os.getenv(
-            "EWALLET_API_URL",
-            config["api"]["base_url"]
-        ).rstrip("/")
-
+        self.base_url = os.getenv("EWALLET_API_URL", "http://127.0.0.1:8000").rstrip("/")
         self.token = None
 
     def _request(self, operation, **payload):
@@ -36,10 +21,30 @@ class Api:
             try: detail = json.loads(exc.read().decode("utf-8")).get("detail", "Request failed")
             except Exception: detail = "Request failed"
             if isinstance(detail, dict): detail = detail.get("message", detail)
+            # A 404 with this message almost always means the desktop client was
+            # updated but the REST API process is still running older source.
+            if exc.code == 404 and str(detail).lower().startswith("unknown api operation"):
+                detail = (
+                    f"The REST API server does not recognize operation '{operation}'.\n\n"
+                    "Your desktop app and API server are running different source versions. "
+                    "Update the SERVER folder from this same project ZIP, stop the old API "
+                    "process (Ctrl+C), then restart it from the project root with:\n\n"
+                    "python -m uvicorn src.api:app --host 0.0.0.0 --port 8000\n\n"
+                    "Then sign out and sign in again. Updating only the GUI is not sufficient."
+                )
             raise RuntimeError(str(detail)) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             raise RuntimeError(f"Cannot connect to REST API at {self.base_url}. Start the API server first.") from exc
         return result
+
+    def health(self):
+        """Return server build metadata without requiring authentication."""
+        request = urllib.request.Request(f"{self.base_url}/health", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise RuntimeError(f"Cannot connect to REST API at {self.base_url}.") from exc
 
     def login(self, phone, password):
         result = self._request("login", phone=phone, password=password)
@@ -62,7 +67,25 @@ class Api:
     def transaction_detail(self, user_id, transaction_id): return self._request("transaction_detail", transaction_id=transaction_id)
     def activity(self, user_id, action=None, limit=100): return self._request("activity", action=action, limit=limit)
     def admin_users(self, user_id): return self._request("admin_users")
-    def admin_wallets(self, user_id): return self._request("admin_wallets")
+    def admin_wallets(self, user_id, owner_id=None): return self._request("admin_wallets", user_id=owner_id)
     def admin_set_wallet_locked(self, admin_id, wallet_id, locked): return self._request("admin_set_wallet_locked", wallet_id=wallet_id, locked=locked)
     def admin_transactions(self, user_id, tx_type=None, status=None): return self._request("admin_transactions", tx_type=tx_type, status=status)
-    def admin_audit_logs(self, user_id, action=None): return self._request("admin_audit_logs", action=action)
+    def admin_transaction_detail(self, user_id, transaction_id): return self._request("admin_transaction_detail", transaction_id=transaction_id)
+    def admin_audit_logs(self, user_id, action=None, target_user_id=None): return self._request("admin_audit_logs", action=action, user_id=target_user_id)
+    def user_profile(self, user_id): return self._request("user_profile")
+    def save_user_profile(self, user_id, age, sex, address, job, country): return self._request("save_user_profile", age=age, sex=sex, address=address, job=job, country=country)
+    def banks(self): return self._request("banks")
+    def bank_accounts(self, user_id): return self._request("bank_accounts")
+    def link_bank(self, user_id, wallet_id, bank_id): return self._request("link_bank", wallet_id=wallet_id, bank_id=bank_id)
+    def statistics(self, user_id, date_from=None, date_to=None): return self._request("statistics", date_from=date_from, date_to=date_to)
+    def admin_user_profile(self, user_id, target_user_id): return self._request("admin_user_profile", user_id=target_user_id)
+    def admin_user_profiles(self, user_id, page=1, page_size=20, search=None, sex=None, country=None,
+                            sort_by="created_at", sort_order="DESC"):
+        return self._request("admin_user_profiles", page=page, page_size=page_size, search=search,
+                             sex=sex, country=country, sort_by=sort_by, sort_order=sort_order)
+    def admin_bank_accounts(self, user_id): return self._request("admin_bank_accounts")
+    def admin_partner_banks(self, user_id): return self._request("admin_partner_banks")
+    def admin_create_partner_bank(self, user_id, name): return self._request("admin_create_partner_bank", name=name)
+    def admin_delete_partner_bank(self, user_id, bank_id): return self._request("admin_delete_partner_bank", bank_id=bank_id)
+    def admin_bank_statistics(self, user_id): return self._request("admin_bank_statistics")
+    def admin_system_statistics(self, user_id): return self._request("admin_system_statistics")

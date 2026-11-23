@@ -11,12 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config.settings import get_settings
 from src.config.database.connection import get_db_connection
 from src.container import build_controllers
-from src.modules.admin.admin_controller import AdminController
-from src.modules.admin.admin_repository import AdminRepository
-from src.modules.admin.admin_service import AdminService
 from src.common.errors import ServiceError
 
-app = FastAPI(title="E-Wallet REST API", version="1.0.0")
+app = FastAPI(title="E-Wallet REST API", version="1.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 @contextmanager
@@ -24,11 +21,7 @@ def controllers():
     conn = get_db_connection()
     try:
         c = build_controllers(conn)
-        admin = AdminController(AdminService(AdminRepository(conn),
-            c.wallets.wallet_service.wallet_repo,
-            c.transactions.transaction_service.tx_repo,
-            c.audit.audit_service.audit_repo, c.audit.audit_service))
-        yield c, admin
+        yield c, c.admin
     finally:
         conn.close()
 
@@ -80,12 +73,31 @@ def run(operation, authorization=None, body=None):
             if operation == "history": return c.transactions.history(uid, body.get("tx_type"), body.get("status"), body.get("limit", 100))
             if operation == "transaction_detail": return c.transactions.transaction_detail(uid, body.get("transaction_id"))
             if operation == "activity": return c.audit.get_activity(uid, body.get("action"), body.get("limit", 100))
+            if operation == "user_profile": return c.profiles.get_profile(uid) or {}
+            if operation == "save_user_profile":
+                return c.profiles.save_profile(uid, body.get("age"), body.get("sex"), body.get("address"), body.get("job"), body.get("country"))
+            if operation == "banks": return c.banks.list_banks()
+            if operation == "bank_accounts": return c.banks.list_my_links(uid)
+            if operation == "link_bank": return c.banks.link_wallet(uid, body.get("wallet_id"), body.get("bank_id"))
+            if operation == "statistics": return c.statistics.my_statistics(uid, body.get("date_from"), body.get("date_to"))
             if operation == "admin_users": return a.list_users(uid)
-            if operation == "admin_wallets": return a.list_wallets(uid)
+            if operation == "admin_wallets": return a.list_wallets(uid, user_id=body.get("user_id"))
             if operation == "admin_set_wallet_locked":
                 return a.lock_wallet(uid, body.get("wallet_id")) if body.get("locked") else a.unlock_wallet(uid, body.get("wallet_id"))
             if operation == "admin_transactions": return a.list_transactions(uid, body.get("tx_type"), body.get("status"))
-            if operation == "admin_audit_logs": return a.list_audit_logs(uid, action=body.get("action"))
+            if operation == "admin_transaction_detail": return a.get_transaction(uid, body.get("transaction_id"))
+            if operation == "admin_audit_logs": return a.list_audit_logs(uid, user_id=body.get("user_id"), action=body.get("action"))
+            if operation == "admin_user_profile": return a.get_user_profile(uid, body.get("user_id")) or {}
+            if operation == "admin_user_profiles":
+                return a.list_user_profiles(uid, page=body.get("page", 1), page_size=body.get("page_size", 20),
+                                            search=body.get("search"), sex=body.get("sex"), country=body.get("country"),
+                                            sort_by=body.get("sort_by", "created_at"), sort_order=body.get("sort_order", "DESC"))
+            if operation == "admin_bank_accounts": return a.list_bank_accounts(uid)
+            if operation == "admin_partner_banks": return a.list_partner_banks(uid)
+            if operation == "admin_create_partner_bank": return a.create_partner_bank(uid, body.get("name"))
+            if operation == "admin_delete_partner_bank": return a.delete_partner_bank(uid, body.get("bank_id"))
+            if operation == "admin_bank_statistics": return a.bank_statistics(uid)
+            if operation == "admin_system_statistics": return a.system_statistics(uid)
             raise HTTPException(404, "Unknown API operation.")
     except ServiceError as exc:
         code = getattr(exc, "code", "")
@@ -93,7 +105,20 @@ def run(operation, authorization=None, body=None):
         raise HTTPException(status_code=status, detail={"code": getattr(exc, "code", "ERROR"), "message": str(exc)})
 
 @app.get("/health")
-def health(): return {"status": "ok"}
+def health():
+    # Lets desktop clients and operators confirm that the updated API process
+    # is running, rather than an older uvicorn process still bound to the port.
+    return {
+        "status": "ok",
+        "service": "ewallet-rest-api",
+        "api_version": app.version,
+        "capabilities": [
+            "user_profile", "save_user_profile", "banks", "bank_accounts",
+            "statistics", "admin_bank_accounts", "admin_partner_banks",
+            "admin_create_partner_bank", "admin_delete_partner_bank", "admin_bank_statistics",
+            "admin_system_statistics", "admin_transaction_detail", "admin_user_profiles",
+        ],
+    }
 
 @app.post("/api/{operation}")
 def api_operation(operation: str, body: dict = None, authorization: str | None = Header(default=None)):

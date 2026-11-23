@@ -1,5 +1,6 @@
 from GUI.pages.common import Page, add_form, add_table, make_button, make_combo
 from GUI.core.formatter import money, short_time
+from GUI.widgets.toast import notify
 
 
 class AdminTransactionsPage(Page):
@@ -15,6 +16,17 @@ class AdminTransactionsPage(Page):
             ("Sender", "sender_id"), ("Receiver", "receiver_id"), ("Status", "status"),
             ("Created", lambda r: short_time(r.get("created_at"))),
         ])
+        self.table.doubleClicked.connect(self.show_detail)
+
+    def show_detail(self):
+        row = self.table.currentRow()
+        if row < 0: return
+        try:
+            tx_id = int(self.table.item(row, 0).text())
+            detail = self.api.admin_transaction_detail(self.state.user_id, tx_id)
+            notify(self, f"Transaction #{tx_id}", "\n".join(f"{key}: {value}" for key, value in detail.items()))
+        except Exception as error:
+            self.show_error(error)
 
     def refresh(self):
         try:

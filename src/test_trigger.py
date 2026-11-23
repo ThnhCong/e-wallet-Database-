@@ -111,7 +111,7 @@ def expect_errno(conn, name, fn, errnos):
         record(name, False, "Khong bi tu choi")
     except mysql_errors.Error as e:
         conn.rollback()
-        errno = getattr(e, "errno", None)
+        errno = getattr(e, "errno", None) or (e.args[0] if e.args else None)   # PyMySQL: errno = args[0]
         record(
             name,
             errno in errnos,
@@ -235,14 +235,14 @@ def check_schema_and_triggers(conn):
         "trg_transactions_before_update", "trg_transactions_before_delete",
         "trg_wallets_before_insert", "trg_wallets_before_update",
         "trg_wallets_before_delete", "trg_audit_logs_before_update",
-        "trg_audit_logs_before_delete",
+        "trg_audit_logs_before_delete", "trg_bank_accounts_before_insert",
     ]
     cur = exec_(conn, "SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema=%s", (db,))
     found = {r[0].lower() for r in cur.fetchall()}
     conn.commit()
     for t in expected:
         check(f"Trigger ton tai: {t}", t in found)
-    check("Dung 9 trigger (khong co trigger thua)", len(found) == 9, str(sorted(found)))
+    check("Dung 10 trigger (khong co trigger thua)", len(found) == 10, str(sorted(found)))
     return True
 
 
@@ -510,7 +510,7 @@ def test_audit_logs(conn, ctx):
     conn.commit()
     log_id = cur.lastrowid
     check("Audit log: INSERT duoc phep", log_id is not None)
-    expect_errno(conn, "Audit log: action ngoai 12 gia tri bi tu choi (CHECK)",
+    expect_errno(conn, "Audit log: action ngoai 13 gia tri bi tu choi (CHECK)",
                  lambda: exec_(conn, "INSERT INTO audit_logs (user_id, action) VALUES (%s,'HACK')", (ctx["user"],)),
                  3819)
     expect_reject(conn, "Audit log: UPDATE bi tu choi",
@@ -519,6 +519,61 @@ def test_audit_logs(conn, ctx):
     expect_reject(conn, "Audit log: DELETE bi tu choi",
                   lambda: exec_(conn, "DELETE FROM audit_logs WHERE audit_log_id=%s", (log_id,)),
                   "cannot be deleted")
+
+
+def test_profiles_and_banks(conn, ctx):
+    """user_profiles (1:1 with users), banks, bank_accounts (Wallet N:M Bank) and the new procedures."""
+    u, w = ctx["user"], ctx["A"]
+    exec_(conn, "INSERT INTO user_profiles (user_id, age, sex, address, job, country) VALUES (%s,30,'MALE','a','b','c')", (u,))
+    conn.commit()
+    check("Profile: tao duoc 1 ho so cho user", True)
+    expect_errno(conn, "Profile: user thu 2 ho so bi tu choi (UNIQUE, 1:1)",
+                 lambda: exec_(conn, "INSERT INTO user_profiles (user_id, age, sex, address, job, country) VALUES (%s,31,'MALE','a','b','c')", (u,)), 1062)
+    expect_errno(conn, "Profile: tuoi ngoai 1..120 bi tu choi (CHECK)",
+                 lambda: exec_(conn, "INSERT INTO user_profiles (user_id, age, sex, address, job, country) VALUES (%s,0,'MALE','a','b','c')", (create_user(conn),)), 3819)
+    expect_errno(conn, "Profile: thieu truong NOT NULL bi tu choi",
+                 lambda: exec_(conn, "INSERT INTO user_profiles (user_id, age, sex) VALUES (%s,20,'MALE')", (create_user(conn),)), 1364)
+    cur = exec_(conn, "INSERT INTO banks (name) VALUES (%s)", ("TestBank_" + uuid.uuid4().hex[:8],))
+    conn.commit()
+    bank = cur.lastrowid
+    cur = exec_(conn, "SELECT cooperated_at FROM banks WHERE bank_id=%s", (bank,))
+    check("Bank: cooperated_at co DEFAULT (ngay hien tai)", cur.fetchone()[0] is not None)
+    conn.commit()
+    expect_errno(conn, "Bank: trung ten bi tu choi (UNIQUE)",
+                 lambda: exec_(conn, "INSERT INTO banks (name) SELECT name FROM banks WHERE bank_id=%s", (bank,)), 1062)
+    cur = exec_(conn, "INSERT INTO bank_accounts (wallet_id, bank_id) VALUES (%s,%s)", (w, bank))
+    conn.commit()
+    cur = exec_(conn, "SELECT status FROM bank_accounts WHERE bank_account_id=%s", (cur.lastrowid,))
+    check("Bank account: status mac dinh SUCCESS", cur.fetchone()[0] == "SUCCESS")
+    conn.commit()
+    expect_reject(conn, "Bank account: lien ket trung (vi, ngan hang) bi tu choi",
+                  lambda: exec_(conn, "INSERT INTO bank_accounts (wallet_id, bank_id) VALUES (%s,%s)", (w, bank)), "already linked")
+    expect_reject(conn, "Bank account: vi bi LOCKED bi tu choi",
+                  lambda: exec_(conn, "INSERT INTO bank_accounts (wallet_id, bank_id) VALUES (%s,%s)", (ctx["LOCKED"], bank)), "locked")
+    expect_reject(conn, "Bank account: ngan hang khong ton tai bi tu choi",
+                  lambda: exec_(conn, "INSERT INTO bank_accounts (wallet_id, bank_id) VALUES (%s,%s)", (w, 99999999)), "Bank does not exist")
+    expect_reject(conn, "Bank account: vi khong ton tai bi tu choi",
+                  lambda: exec_(conn, "INSERT INTO bank_accounts (wallet_id, bank_id) VALUES (%s,%s)", (99999999, bank)), "Wallet does not exist")
+    expect_errno(conn, "Bank: xoa ngan hang da co lien ket bi tu choi (RESTRICT)",
+                 lambda: exec_(conn, "DELETE FROM banks WHERE bank_id=%s", (bank,)), 1451)
+    expect_reject(conn, "Wallet: xoa vi da co lien ket / giao dich bi tu choi",
+                  lambda: exec_(conn, "DELETE FROM wallets WHERE wallet_id=%s", (w,)), "cannot be deleted")
+    cur = exec_(conn, "CALL sp_user_profile_save(%s,40,'FEMALE','x','y','z')", (u,))
+    row = cur.fetchall()
+    conn.commit()
+    check("sp_user_profile_save: cap nhat ho so da co (created = 0)", row and not row[0][1], str(row))
+    cur = exec_(conn, "CALL sp_user_statistics(%s,NULL,NULL)", (u,))
+    rows = cur.fetchall()
+    conn.commit()
+    check("sp_user_statistics: tra ve thong ke theo tung loai tien", len(rows) >= 1 and {r[0] for r in rows} <= {"VND", "USD"}, str(rows))
+    cur = exec_(conn, "CALL sp_bank_statistics()")
+    rows = cur.fetchall()
+    conn.commit()
+    check("sp_bank_statistics: ngan hang vua tao co 1 vi lien ket", any(r[1].startswith("TestBank_") and r[3] == 1 and r[4] == 1 for r in rows))
+    cur = exec_(conn, "CALL sp_admin_system_statistics()")
+    row = cur.fetchone()
+    conn.commit()
+    check("sp_admin_system_statistics: co so lieu tong hop", row is not None and row[0] >= 1, str(row))
 
 
 def test_weekly_reset_event(conn, ctx):
@@ -621,7 +676,7 @@ def test_concurrency(conn, ctx, iterations=30):
                             stats["ok"][idx] += 1
                         break
                     except mysql_errors.Error as e:
-                        errno = getattr(e, "errno", None)
+                        errno = getattr(e, "errno", None) or (e.args[0] if e.args else None)   # PyMySQL: errno = args[0]
                         if errno in (1213, 1205):  # deadlock / lock wait timeout
                             with lock:
                                 stats["retry"] += 1
@@ -694,6 +749,7 @@ def main():
         ("Bao ve vi (balance / xoa vi)", test_wallet_protection),
         ("Re-check khi PENDING -> SUCCESS", test_recheck_on_success),
         ("Audit logs bat bien", test_audit_logs),
+        ("user_profiles / banks / bank_accounts + thu tuc thong ke", test_profiles_and_banks),
         ("Event reset han muc tuan", test_weekly_reset_event),
     ]
     if ARGS.client_user:

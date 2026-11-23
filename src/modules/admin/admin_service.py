@@ -13,7 +13,7 @@ from functools import wraps
 from src.common.db import db_transaction
 from src.common.errors import ServiceError
 from src.common.query_params import DEFAULT_ADMIN_LIMIT, normalize_limit, parse_optional_id
-from src.common.validators import TX_STATUSES, TX_TYPES, parse_choice, parse_id
+from src.common.validators import TX_STATUSES, TX_TYPES, parse_choice, parse_id, require_text
 from src.modules.audit_logs.audit_actions import AUDIT_ACTIONS, AuditAction
 from src.config.settings import get_settings
 
@@ -33,8 +33,12 @@ def admin_action(operation):
 
 class AdminService:
 
-    def __init__(self, admin_repository, wallet_repository, transaction_repository, audit_repository, audit_service):
+    def __init__(self, admin_repository, wallet_repository, transaction_repository, audit_repository, audit_service,
+                 profile_repository=None, bank_repository=None, statistics_repository=None):
         self.admin_repo = admin_repository
+        self.profile_repo = profile_repository
+        self.bank_repo = bank_repository
+        self.stats_repo = statistics_repository
         self.wallet_repo = wallet_repository
         self.tx_repo = transaction_repository
         self.audit_repo = audit_repository          # chi de DOC log
@@ -91,3 +95,71 @@ class AdminService:
         self.wallet_repo.set_wallet_status(wallet_id, status)
         self.audit.record(admin_id, action, wallet_id=wallet_id)
         return self.wallet_repo.get_wallet_by_id(wallet_id)
+
+    # ---------------------------------------------------------------- ho so, ngan hang, thong ke
+    @admin_action("View user profile")
+    def get_user_profile(self, admin_id, user_id):
+        return self.profile_repo.get_profile(parse_id(user_id, "User"))
+
+    @admin_action("View user profiles")
+    def list_user_profiles(self, admin_id, page=1, page_size=20, search=None, sex=None, country=None,
+                           sort_by="created_at", sort_order="DESC"):
+        page = parse_id(page, "Page")
+        page_size = normalize_limit(page_size, default=20, maximum=100)
+        sort_by = str(sort_by or "created_at").strip().lower()
+        if sort_by not in ("created_at", "user_id"):
+            raise ServiceError("SORT_INVALID", "Sort field must be created_at or user_id.")
+        sort_order = str(sort_order or "DESC").strip().upper()
+        if sort_order not in ("ASC", "DESC"):
+            raise ServiceError("SORT_INVALID", "Sort order must be ASC or DESC.")
+        search = (str(search).strip()[:255] if search is not None and str(search).strip() else None)
+        country = (str(country).strip()[:100] if country is not None and str(country).strip() else None)
+        sex = parse_choice(sex, ("MALE", "FEMALE", "OTHER"), "Sex")
+        offset = (page - 1) * page_size
+        rows = self.profile_repo.list_profiles_for_admin(
+            search, sex, country, sort_by, sort_order, page_size, offset
+        ) or []
+
+        # The SQL procedure returns a sentinel row with user_profile_id=NULL
+        # when no matching profile exists. It keeps the total count available
+        # even when the page contains zero records.
+        total = int(rows[0].get("total_count") or 0) if rows else 0
+        items = [
+            {key: value for key, value in row.items() if key != "total_count"}
+            for row in rows
+            if row.get("user_profile_id") is not None
+        ]
+        total_pages = (total + page_size - 1) // page_size
+        return {
+            "items": items,
+            "total": total,
+            "page": page if total_pages else 1,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
+    @admin_action("View bank accounts")
+    def list_bank_accounts(self, admin_id, limit=DEFAULT_ADMIN_LIMIT):
+        return self.bank_repo.list_all_links(normalize_limit(limit))
+
+    @admin_action("View partner banks")
+    def list_partner_banks(self, admin_id):
+        return self.bank_repo.list_banks()
+
+    @admin_action("Add partner bank")
+    def create_partner_bank(self, admin_id, name):
+        name = require_text(name, "Bank name", 100)
+        return self.bank_repo.create_partner_bank(name)
+
+    @admin_action("Delete partner bank")
+    def delete_partner_bank(self, admin_id, bank_id):
+        bank_id = parse_id(bank_id, "Bank")
+        return self.bank_repo.delete_partner_bank(bank_id)
+
+    @admin_action("View bank statistics")
+    def bank_statistics(self, admin_id):
+        return self.stats_repo.bank_statistics()
+
+    @admin_action("View system statistics")
+    def system_statistics(self, admin_id):
+        return self.stats_repo.system_statistics()

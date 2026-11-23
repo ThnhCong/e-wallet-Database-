@@ -4,7 +4,7 @@ from GUI.core.formatter import short_time
 
 ACTIONS = ["REGISTER", "LOGIN", "LOGOUT", "CHANGE_PASSWORD", "UPDATE_PROFILE",
            "CREATE_WALLET", "LOCK_WALLET", "UNLOCK_WALLET", "DEPOSIT", "WITHDRAW",
-           "TRANSFER", "TRANSFER_RECEIVED"]
+           "TRANSFER", "TRANSFER_RECEIVED", "LINK_BANK"]
 
 
 class AdminAuditLogsPage(Page):
@@ -12,7 +12,8 @@ class AdminAuditLogsPage(Page):
         super().__init__("Audit logs", "Immutable record of important system activities.", parent)
         self.api, self.state = api, state
         self.action = make_combo(ACTIONS, "All actions")
-        add_form(self, [("Action", self.action)])
+        self.user_filter = make_input("Optional user ID")
+        add_form(self, [("Action", self.action), ("User ID", self.user_filter)])
         self.layout.addWidget(make_button("Refresh logs", self.refresh))
         self.table = add_table(self, [
             ("Log ID", "audit_log_id"), ("User", "user_id"), ("Wallet", "wallet_id"),
@@ -22,6 +23,8 @@ class AdminAuditLogsPage(Page):
 
     def refresh(self):
         try:
-            self.table.set_rows(self.api.admin_audit_logs(self.state.user_id, self.action.currentData()))
+            raw = self.user_filter.text().strip()
+            target_user_id = int(raw) if raw else None
+            self.table.set_rows(self.api.admin_audit_logs(self.state.user_id, self.action.currentData(), target_user_id))
         except Exception as error:
             self.show_error(error)

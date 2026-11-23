@@ -1,4 +1,4 @@
-from GUI.pages.common import Page, add_table, make_button
+from GUI.pages.common import Page, add_table, make_button, make_input
 from GUI.core.formatter import money
 from GUI.widgets.confirm_dialog import confirm
 from GUI.widgets.toast import notify
@@ -8,6 +8,8 @@ class AdminWalletsPage(Page):
     def __init__(self, api, state, parent=None):
         super().__init__("Wallet administration", "Review wallets and lock or unlock them when necessary.", parent)
         self.api, self.state = api, state
+        self.owner_filter = make_input("Optional customer user ID")
+        self.layout.addWidget(self.owner_filter)
         self.layout.addWidget(make_button("Refresh wallets", self.refresh))
         self.table = add_table(self, [
             ("Wallet ID", "wallet_id"), ("Owner ID", "user_id"), ("Owner", "user_name"),
@@ -21,7 +23,9 @@ class AdminWalletsPage(Page):
 
     def refresh(self):
         try:
-            self.table.set_rows(self.api.admin_wallets(self.state.user_id))
+            raw = self.owner_filter.text().strip()
+            owner_id = int(raw) if raw else None
+            self.table.set_rows(self.api.admin_wallets(self.state.user_id, owner_id))
         except Exception as error:
             self.show_error(error)
 

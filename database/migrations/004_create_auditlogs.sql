@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS audit_logs (
         REFERENCES wallets(wallet_id) ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT fk_audit_logs_transaction_id FOREIGN KEY (transaction_id) 
         REFERENCES transactions(transaction_id) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

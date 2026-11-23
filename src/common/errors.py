@@ -22,6 +22,11 @@ _RULES = [  # (doan thong bao cua trigger, viet thuong) -> (code, thong bao)   {
     ("cannot be the same wallet", "SAME_WALLET", "You cannot transfer to the same wallet."),
     ("unsupported currency", "CURRENCY_UNSUPPORTED", "Only VND and USD wallets are supported."),
     ("balance can only be changed", "INTERNAL", "Internal error: the balance cannot be edited directly."),
+    ("bank does not exist", "BANK_NOT_FOUND", "The bank does not exist."),
+    ("bank has linked accounts", "BANK_IN_USE", "This bank cannot be deleted because customer wallets are linked to it."),
+    ("cannot delete bank", "BANK_IN_USE", "This bank cannot be deleted because customer wallets are linked to it."),
+    ("already linked", "BANK_ALREADY_LINKED", "This wallet is already linked to this bank."),
+    ("cannot start as fail", "INTERNAL", "A new bank link cannot start as FAIL."),
 ]
 
 
@@ -34,6 +39,8 @@ def translate_db_error(exc, operation="Operation"):
         if fragment in low:
             return ServiceError(code, msg.format(op=operation))
     if errno == 1062:
+        if "bank" in low or "uq_banks_name" in low:
+            return ServiceError("DUPLICATE_BANK", "A partner bank with this name already exists.")
         if "phone" in low:
             return ServiceError("DUPLICATE_PHONE", "This phone number is already registered.")
         if "email" in low:
@@ -45,5 +52,5 @@ def translate_db_error(exc, operation="Operation"):
         return ServiceError("CONSTRAINT", "The data violates a database rule.")
     if errno in (1213, 1205):
         return ServiceError("BUSY", "The system is busy, please try again.")
-    log.error("Unexpected database error: %r", exc)
+    log.exception("Unexpected database error (MySQL errno=%s): %r", errno, exc)
     return ServiceError("DB_ERROR", "A system error occurred. Please try again later.")

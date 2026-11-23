@@ -1,6 +1,7 @@
 # src/common/validators.py
 """Chi kiem tra DINH DANG dau vao; luat nghiep vu (so du, han muc, vi bi khoa...) do trigger lo."""
 import re
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from src.common.errors import ServiceError
@@ -9,6 +10,7 @@ MAX_AMOUNT = Decimal("9999999999999.99")  # DECIMAL(15,2)
 CURRENCIES = ("VND", "USD")
 TX_TYPES = ("DEPOSIT", "WITHDRAW", "TRANSFER")
 TX_STATUSES = ("PENDING", "SUCCESS", "FAIL")
+SEXES = ("MALE", "FEMALE", "OTHER")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PHONE = re.compile(r"^\d{8,15}$")
 
@@ -80,3 +82,30 @@ def parse_choice(value, allowed, label):
     if v not in allowed:
         raise ServiceError("FILTER_INVALID", f"{label} must be one of: {', '.join(allowed)}.")
     return v
+
+
+def validate_age(value):
+    try:
+        age = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ServiceError("AGE_INVALID", "Age must be a whole number.") from None
+    if not 1 <= age <= 120:
+        raise ServiceError("AGE_INVALID", "Age must be between 1 and 120.")
+    return age
+
+
+def parse_sex(value):
+    v = (value or "").strip().upper()
+    if v not in SEXES:
+        raise ServiceError("SEX_INVALID", f"Sex must be one of: {', '.join(SEXES)}.")
+    return v
+
+
+def parse_optional_date(value, label):
+    """Empty -> None; otherwise a YYYY-MM-DD string -> datetime.date."""
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        return date.fromisoformat(str(value).strip())
+    except ValueError:
+        raise ServiceError("DATE_INVALID", f"{label} must be a date in the format YYYY-MM-DD.") from None

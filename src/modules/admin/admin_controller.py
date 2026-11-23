@@ -25,3 +25,29 @@ class AdminController:
 
     def unlock_wallet(self, admin_id, wallet_id):
         return self.admin_service.set_wallet_locked(admin_id, wallet_id, False)
+
+    def get_user_profile(self, admin_id, user_id):
+        return self.admin_service.get_user_profile(admin_id, user_id)
+
+    def list_user_profiles(self, admin_id, page=1, page_size=20, search=None, sex=None, country=None,
+                           sort_by="created_at", sort_order="DESC"):
+        return self.admin_service.list_user_profiles(admin_id, page, page_size, search, sex, country,
+                                                     sort_by, sort_order)
+
+    def list_bank_accounts(self, admin_id, limit=50):
+        return self.admin_service.list_bank_accounts(admin_id, limit)
+
+    def list_partner_banks(self, admin_id):
+        return self.admin_service.list_partner_banks(admin_id)
+
+    def create_partner_bank(self, admin_id, name):
+        return self.admin_service.create_partner_bank(admin_id, name)
+
+    def delete_partner_bank(self, admin_id, bank_id):
+        return self.admin_service.delete_partner_bank(admin_id, bank_id)
+
+    def bank_statistics(self, admin_id):
+        return self.admin_service.bank_statistics(admin_id)
+
+    def system_statistics(self, admin_id):
+        return self.admin_service.system_statistics(admin_id)
