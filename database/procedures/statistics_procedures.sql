@@ -29,13 +29,13 @@ END$$
 -- (users and banks are related N:M through wallets and bank_accounts.)
 CREATE PROCEDURE sp_bank_statistics()
 BEGIN
-  SELECT b.bank_id,b.name AS bank_name,b.cooperated_at,
+  SELECT b.bank_id,b.name AS bank_name,b.cooperated_at,b.is_valid,
          COUNT(ba.bank_account_id)   AS linked_wallets,
          COUNT(DISTINCT w.user_id)   AS linked_users
   FROM banks b
   LEFT JOIN bank_accounts ba ON ba.bank_id=b.bank_id AND ba.status='SUCCESS'
   LEFT JOIN wallets w ON w.wallet_id=ba.wallet_id
-  GROUP BY b.bank_id,b.name,b.cooperated_at
+  GROUP BY b.bank_id,b.name,b.cooperated_at,b.is_valid
   ORDER BY linked_wallets DESC,b.name;
 END$$
 
@@ -47,6 +47,8 @@ BEGIN
          (SELECT COUNT(*) FROM wallets)                                      AS wallets,
          (SELECT COUNT(*) FROM wallets WHERE status='LOCKED')                AS locked_wallets,
          (SELECT COUNT(*) FROM banks)                                        AS banks,
+         (SELECT COUNT(*) FROM banks WHERE is_valid=TRUE) AS active_banks,
+         (SELECT COUNT(*) FROM banks WHERE is_valid=FALSE) AS inactive_banks,
          (SELECT COUNT(*) FROM bank_accounts)                                AS bank_accounts,
          (SELECT COUNT(*) FROM transactions WHERE status='SUCCESS')          AS tx_success,
          (SELECT COUNT(*) FROM transactions WHERE status='FAIL')             AS tx_fail,

@@ -5,7 +5,7 @@ from GUI.widgets.toast import notify
 
 class WithdrawPage(Page):
     def __init__(self, api, state, parent=None):
-        super().__init__("Withdraw", "The amount must not exceed the wallet balance. Weekly transfer limits do not apply.", parent)
+        super().__init__("Withdraw", "The amount must not exceed the wallet balance. Link an active partner bank first.", parent)
         self.api, self.state = api, state
         self.wallet = make_combo([])
         self.amount = AmountInput()

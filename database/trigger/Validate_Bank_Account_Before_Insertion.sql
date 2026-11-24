@@ -11,6 +11,7 @@ FOR EACH ROW
 BEGIN
     DECLARE v_w_status VARCHAR(10) DEFAULT NULL;
     DECLARE v_bank_id  BIGINT UNSIGNED DEFAULT NULL;
+    DECLARE v_bank_valid BOOLEAN DEFAULT FALSE;
     DECLARE v_dup      BIGINT UNSIGNED DEFAULT NULL;
     DECLARE CONTINUE HANDLER FOR NOT FOUND BEGIN END;   -- SELECT ... INTO without a row is not an error here
 
@@ -22,13 +23,15 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Wallet is locked';
     END IF;
 
-    SELECT bank_id INTO v_bank_id FROM banks WHERE bank_id = NEW.bank_id;
+    SELECT bank_id, is_valid INTO v_bank_id, v_bank_valid FROM banks WHERE bank_id = NEW.bank_id;
     IF v_bank_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bank does not exist';
     END IF;
+    IF v_bank_valid <> TRUE THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Partner bank is not currently cooperating'; END IF;
+    IF NEW.account_number IS NULL OR NEW.account_number NOT REGEXP '^[0-9]{6,34}$' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bank account number must contain 6-34 digits'; END IF;
 
     SELECT bank_account_id INTO v_dup FROM bank_accounts
-     WHERE wallet_id = NEW.wallet_id AND bank_id = NEW.bank_id LIMIT 1;
+     WHERE wallet_id = NEW.wallet_id AND bank_id = NEW.bank_id AND status = 'SUCCESS' LIMIT 1;
     IF v_dup IS NOT NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Wallet is already linked to this bank';
     END IF;

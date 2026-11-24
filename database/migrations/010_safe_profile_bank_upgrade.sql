@@ -1,0 +1,4 @@
+-- DEPRECATED: this project now uses a clean full rebuild for practice.
+-- Do not run this upgrade script. Use database/install.sh root --reset [--seed]
+-- or execute All_Migrations.sql, All_Triggers.sql, All_Procedures.sql and
+-- 009_create_user_for_clients.sql in order after intentionally dropping ewallet.

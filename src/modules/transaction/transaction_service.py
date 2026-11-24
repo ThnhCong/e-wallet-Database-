@@ -15,10 +15,11 @@ _AUDIT_ACTION_OF = {DEPOSIT: AuditAction.DEPOSIT, WITHDRAW: AuditAction.WITHDRAW
 
 class TransactionService:
 
-    def __init__(self, transaction_repository, wallet_repository, audit_service):
+    def __init__(self, transaction_repository, wallet_repository, audit_service, bank_repository=None):
         self.tx_repo = transaction_repository
         self.wallet_repo = wallet_repository        # chi dung de khoa vi va doc so du sau giao dich
         self.audit = audit_service
+        self.bank_repo = bank_repository
         self.conn = transaction_repository.conn
 
     # ---------------------------------------------------------------- nap / rut / chuyen
@@ -43,6 +44,10 @@ class TransactionService:
         with db_transaction(self.conn, operation):
             wallets = self.wallet_repo.lock_wallets(sender_id, receiver_id)      # thu tu id tang dan
             own_id = self._authorize(tx_type, user_id, sender_id, receiver_id, wallets)
+            if self.bank_repo is not None:
+                for wid in (sender_id, receiver_id):
+                    if wid is not None and not self.bank_repo.has_active_link(wid):
+                        raise ServiceError("BANK_NOT_LINKED", f"Wallet #{wid} must be linked to an active partner bank before transacting.")
 
             tx_id = self.tx_repo.create_transaction(sender_id, receiver_id, tx_type, amount)   # PENDING
             failure = self._settle(tx_id)                                                      # -> SUCCESS / FAIL

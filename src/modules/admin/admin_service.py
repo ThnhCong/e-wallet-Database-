@@ -99,7 +99,10 @@ class AdminService:
     # ---------------------------------------------------------------- ho so, ngan hang, thong ke
     @admin_action("View user profile")
     def get_user_profile(self, admin_id, user_id):
-        return self.profile_repo.get_profile(parse_id(user_id, "User"))
+        user_id=parse_id(user_id, "User")
+        user=self.admin_repo.get_user(user_id)
+        if user is None: raise ServiceError("USER_NOT_FOUND", "The user does not exist.")
+        return {"user": user, "profile": self.profile_repo.get_profile(user_id) or {}}
 
     @admin_action("View user profiles")
     def list_user_profiles(self, admin_id, page=1, page_size=20, search=None, sex=None, country=None,
@@ -144,17 +147,20 @@ class AdminService:
 
     @admin_action("View partner banks")
     def list_partner_banks(self, admin_id):
-        return self.bank_repo.list_banks()
+        return self.bank_repo.list_all_banks()
 
     @admin_action("Add partner bank")
     def create_partner_bank(self, admin_id, name):
         name = require_text(name, "Bank name", 100)
         return self.bank_repo.create_partner_bank(name)
 
-    @admin_action("Delete partner bank")
-    def delete_partner_bank(self, admin_id, bank_id):
-        bank_id = parse_id(bank_id, "Bank")
-        return self.bank_repo.delete_partner_bank(bank_id)
+    @admin_action("Update partner bank")
+    def set_partner_bank_valid(self, admin_id, bank_id, is_valid):
+        bank_id=parse_id(bank_id, "Bank")
+        if not isinstance(is_valid, bool): raise ServiceError("BANK_STATUS_INVALID", "is_valid must be a boolean.")
+        bank=self.bank_repo.set_bank_valid(bank_id, is_valid)
+        if bank is None: raise ServiceError("BANK_NOT_FOUND", "The partner bank does not exist.")
+        return bank
 
     @admin_action("View bank statistics")
     def bank_statistics(self, admin_id):

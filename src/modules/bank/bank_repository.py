@@ -8,6 +8,12 @@ class BankRepository(BaseRepository):
     def list_banks(self):
         return self.call("sp_bank_list")
 
+    def list_all_banks(self): return self.call("sp_admin_bank_list")
+    def set_bank_valid(self, bank_id, is_valid):
+        rows=self.call("sp_admin_bank_set_valid", (bank_id, bool(is_valid))); return rows[0] if rows else None
+    def has_active_link(self, wallet_id):
+        rows=self.call("sp_bank_account_has_active_link", (wallet_id,)); return bool(rows and rows[0].get("has_active_link"))
+
     def get_bank(self, bank_id):
         rows = self.call("sp_bank_get", (bank_id,))
         return rows[0] if rows else None
@@ -16,13 +22,12 @@ class BankRepository(BaseRepository):
         rows = self.call("sp_admin_bank_create", (name,))
         return rows[0] if rows else None
 
-    def delete_partner_bank(self, bank_id):
-        rows = self.call("sp_admin_bank_delete", (bank_id,))
-        return rows[0] if rows else {"bank_id": bank_id}
+    def link(self, wallet_id, bank_id, account_number):
+        rows = self.call("sp_bank_account_link", (wallet_id, bank_id, account_number))
+        return rows[0] if rows else {}
 
-    def link(self, wallet_id, bank_id):
-        rows = self.call("sp_bank_account_link", (wallet_id, bank_id))
-        return rows[0]["bank_account_id"]
+    def unlink(self, user_id, bank_account_id):
+        rows=self.call("sp_bank_account_unlink", (user_id, bank_account_id)); return rows[0] if rows and rows[0].get("affected_rows") else None
 
     def list_links_by_user(self, user_id):
         return self.call("sp_bank_account_list_by_user", (user_id,))

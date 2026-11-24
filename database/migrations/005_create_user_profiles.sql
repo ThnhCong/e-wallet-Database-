@@ -8,6 +8,7 @@ USE ewallet;
 CREATE TABLE IF NOT EXISTS user_profiles (
     user_profile_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL,
+    date_of_birth DATE NOT NULL,
     age TINYINT UNSIGNED NOT NULL,
     sex ENUM('MALE', 'FEMALE', 'OTHER') NOT NULL,
     address VARCHAR(255) NOT NULL,

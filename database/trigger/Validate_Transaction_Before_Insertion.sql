@@ -93,6 +93,14 @@ BEGIN
         END IF;
     END IF;
 
+    -- Every participating wallet needs a successful link to a currently cooperating bank.
+    IF NEW.sender_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM bank_accounts ba INNER JOIN banks b ON b.bank_id=ba.bank_id WHERE ba.wallet_id=NEW.sender_id AND ba.status='SUCCESS' AND b.is_valid=TRUE) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Link an active partner bank to the sender wallet before transacting';
+    END IF;
+    IF NEW.receiver_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM bank_accounts ba INNER JOIN banks b ON b.bank_id=ba.bank_id WHERE ba.wallet_id=NEW.receiver_id AND ba.status='SUCCESS' AND b.is_valid=TRUE) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Link an active partner bank to the receiver wallet before transacting';
+    END IF;
+
     -- transfer-only rules: same currency, remaining weekly limit
     IF NEW.type = 'TRANSFER' THEN
         IF v_s_currency <> v_r_currency THEN

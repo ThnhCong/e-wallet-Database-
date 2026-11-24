@@ -53,10 +53,10 @@ def build_controllers(conn):
     wallet_service = WalletService(wallet_repo, audit_service)
 
     user_service = UserService(UserRepository(conn), audit_service, wallet_service)
-    transaction_service = TransactionService(TransactionRepository(conn), wallet_repo, audit_service)
 
     profile_repo = UserProfileRepository(conn)
     bank_repo = BankRepository(conn)
+    transaction_service = TransactionService(TransactionRepository(conn), wallet_repo, audit_service, bank_repo)
     stats_repo = StatisticsRepository(conn)
     tx_repo = transaction_service.tx_repo
     admin_service = AdminService(AdminRepository(conn), wallet_repo, tx_repo, audit_service.audit_repo, audit_service,

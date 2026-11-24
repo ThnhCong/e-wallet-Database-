@@ -8,7 +8,7 @@ class AdminBankStatisticsPage(Page):
         self.api, self.state = api, state
         self.layout.addWidget(make_button("Refresh bank analytics", self.refresh))
         self.table = add_table(self, [
-            ("Bank ID", "bank_id"), ("Partner bank", "bank_name"),
+            ("Bank ID", "bank_id"), ("Partner bank", "bank_name"), ("Currently cooperating", "is_valid"),
             ("Linked wallets", "linked_wallets"), ("Unique users", "linked_users"),
             ("Partner since", lambda r: short_time(r.get("cooperated_at"))),
         ])

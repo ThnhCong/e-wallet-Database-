@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from GUI.widgets.tx_table import show_record_details
 
 
 class BalanceCard(QFrame):
@@ -15,3 +16,10 @@ class BalanceCard(QFrame):
 
     def set_value(self, value):
         self.value_label.setText(str(value))
+
+    def mouseDoubleClickEvent(self, event):
+        show_record_details(self, self.title_label.text().title(), [
+            ("Metric", self.title_label.text()),
+            ("Current value", self.value_label.text()),
+        ])
+        super().mouseDoubleClickEvent(event)

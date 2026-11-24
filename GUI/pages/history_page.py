@@ -17,7 +17,7 @@ class HistoryPage(Page):
             ("Sender", "sender_id"), ("Receiver", "receiver_id"), ("Status", "status"),
             ("Created", lambda r: short_time(r.get("created_at"))),
         ])
-        self.table.doubleClicked.connect(self.show_detail)
+        self.table.set_detail_handler(self.show_detail)
 
     def refresh(self):
         try:
@@ -27,8 +27,7 @@ class HistoryPage(Page):
             return
         self.run_api(self.api.history, self.state.user_id, self.type_filter.currentData(),
                      self.status_filter.currentData(), limit, on_success=self.table.set_rows)
-    def show_detail(self):
-        row = self.table.currentRow()
+    def show_detail(self, row, _column):
         if row < 0:
             return
         try:

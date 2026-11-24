@@ -5,7 +5,7 @@ from GUI.widgets.toast import notify
 
 class TransferPage(Page):
     def __init__(self, api, state, parent=None):
-        super().__init__("Transfer money", "Both wallets must be active and use the same currency. The sender's weekly limit applies.", parent)
+        super().__init__("Transfer money", "Both wallets must be active, use the same currency, and be linked to active partner banks. The sender's weekly limit applies.", parent)
         self.api, self.state = api, state
         self.sender = make_combo([])
         self.receiver = make_input("Receiver wallet ID")

@@ -162,18 +162,19 @@ DROP PROCEDURE IF EXISTS sp_admin_list_user_profiles;
 DELIMITER $$
 CREATE PROCEDURE sp_user_profile_get(IN p_user_id BIGINT UNSIGNED)
 BEGIN
-  SELECT user_profile_id,user_id,age,sex,address,job,country,created_at
+  SELECT user_profile_id,user_id,date_of_birth,age,sex,address,job,country,created_at
   FROM user_profiles WHERE user_id=p_user_id LIMIT 1;
 END$$
-CREATE PROCEDURE sp_user_profile_save(IN p_user_id BIGINT UNSIGNED, IN p_age TINYINT UNSIGNED, IN p_sex VARCHAR(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
+CREATE PROCEDURE sp_user_profile_save(IN p_user_id BIGINT UNSIGNED, IN p_date_of_birth DATE, IN p_age TINYINT UNSIGNED, IN p_sex VARCHAR(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
                                       IN p_address VARCHAR(255), IN p_job VARCHAR(100), IN p_country VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci)
 BEGIN
   DECLARE v_rows INT DEFAULT 0;
   -- created_at is set only when the profile is first inserted.
   -- On duplicate key (profile already exists), it is deliberately preserved.
-  INSERT INTO user_profiles(user_id,age,sex,address,job,country,created_at)
-  VALUES(p_user_id,p_age,p_sex,p_address,p_job,p_country,CURRENT_TIMESTAMP)
+  INSERT INTO user_profiles(user_id,date_of_birth,age,sex,address,job,country,created_at)
+  VALUES(p_user_id,p_date_of_birth,p_age,p_sex,p_address,p_job,p_country,CURRENT_TIMESTAMP)
   ON DUPLICATE KEY UPDATE
+      date_of_birth=VALUES(date_of_birth),
       age=VALUES(age),
       sex=VALUES(sex),
       address=VALUES(address),
@@ -196,6 +197,7 @@ BEGIN
            page_rows.user_name,
            page_rows.email,
            page_rows.phone,
+           page_rows.date_of_birth,
            page_rows.age,
            page_rows.sex,
            page_rows.address,
@@ -219,7 +221,7 @@ BEGIN
     ) AS totals
     LEFT JOIN (
         SELECT p.user_profile_id, p.user_id, u.user_name, u.email, u.phone,
-               p.age, p.sex, p.address, p.job, p.country, p.created_at
+               p.date_of_birth, p.age, p.sex, p.address, p.job, p.country, p.created_at
         FROM user_profiles p
         INNER JOIN users u ON u.user_id = p.user_id
         WHERE (p_search IS NULL
@@ -243,68 +245,98 @@ BEGIN
 END$$
 DELIMITER ;
 
+
 -- ==================== bank_procedures.sql ====================
+DROP PROCEDURE IF EXISTS sp_admin_list_users;
 DROP PROCEDURE IF EXISTS sp_admin_bank_create;
-DROP PROCEDURE IF EXISTS sp_admin_bank_delete;
+DROP PROCEDURE IF EXISTS sp_admin_bank_set_valid;
 DROP PROCEDURE IF EXISTS sp_bank_list;
+DROP PROCEDURE IF EXISTS sp_admin_bank_list;
 DROP PROCEDURE IF EXISTS sp_bank_get;
 DROP PROCEDURE IF EXISTS sp_bank_account_link;
+DROP PROCEDURE IF EXISTS sp_bank_account_unlink;
+DROP PROCEDURE IF EXISTS sp_bank_account_has_active_link;
 DROP PROCEDURE IF EXISTS sp_bank_account_list_by_user;
 DROP PROCEDURE IF EXISTS sp_bank_account_list_all;
 DELIMITER $$
 CREATE PROCEDURE sp_bank_list()
-BEGIN
-  SELECT bank_id,name,cooperated_at FROM banks ORDER BY name;
-END$$
--- Admin-only operations are protected by the AdminService authorization check.
+BEGIN SELECT bank_id,name,cooperated_at,is_valid FROM banks WHERE is_valid=TRUE ORDER BY name; END$$
+CREATE PROCEDURE sp_admin_bank_list()
+BEGIN SELECT bank_id,name,cooperated_at,is_valid FROM banks ORDER BY name; END$$
 CREATE PROCEDURE sp_admin_bank_create(IN p_name VARCHAR(100))
 BEGIN
-  IF p_name IS NULL OR CHAR_LENGTH(TRIM(p_name)) = 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bank name is required';
-  END IF;
-  INSERT INTO banks(name) VALUES(TRIM(p_name));
-  SELECT bank_id,name,cooperated_at FROM banks WHERE bank_id=LAST_INSERT_ID();
+ IF p_name IS NULL OR CHAR_LENGTH(TRIM(p_name))=0 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Bank name is required'; END IF;
+ INSERT INTO banks(name,is_valid) VALUES(TRIM(p_name),TRUE);
+ SELECT bank_id,name,cooperated_at,is_valid FROM banks WHERE bank_id=LAST_INSERT_ID();
 END$$
-CREATE PROCEDURE sp_admin_bank_delete(IN p_bank_id BIGINT UNSIGNED)
+CREATE PROCEDURE sp_admin_bank_set_valid(IN p_bank_id BIGINT UNSIGNED, IN p_is_valid BOOLEAN)
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM banks WHERE bank_id=p_bank_id) THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bank does not exist';
-  END IF;
-  IF EXISTS (SELECT 1 FROM bank_accounts WHERE bank_id=p_bank_id) THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bank has linked accounts';
-  END IF;
-  DELETE FROM banks WHERE bank_id=p_bank_id;
-  SELECT p_bank_id AS bank_id;
+ IF NOT EXISTS(SELECT 1 FROM banks WHERE bank_id=p_bank_id) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Bank does not exist'; END IF;
+ UPDATE banks SET is_valid=p_is_valid WHERE bank_id=p_bank_id;
+ SELECT bank_id,name,cooperated_at,is_valid FROM banks WHERE bank_id=p_bank_id;
 END$$
 CREATE PROCEDURE sp_bank_get(IN p_bank_id BIGINT UNSIGNED)
+BEGIN SELECT bank_id,name,cooperated_at,is_valid FROM banks WHERE bank_id=p_bank_id LIMIT 1; END$$
+CREATE PROCEDURE sp_bank_account_link(IN p_wallet_id BIGINT UNSIGNED, IN p_bank_id BIGINT UNSIGNED, IN p_account_number VARCHAR(34))
 BEGIN
-  SELECT bank_id,name,cooperated_at FROM banks WHERE bank_id=p_bank_id LIMIT 1;
+ IF NOT EXISTS(SELECT 1 FROM banks WHERE bank_id=p_bank_id AND is_valid=TRUE) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='This partner bank is no longer active'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM wallets WHERE wallet_id=p_wallet_id AND status='ACTIVE') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Wallet does not exist or is locked'; END IF;
+ IF p_account_number IS NULL OR p_account_number NOT REGEXP '^[0-9]{6,34}$' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Bank account number must contain 6-34 digits'; END IF;
+ IF EXISTS(SELECT 1 FROM bank_accounts WHERE bank_id=p_bank_id AND account_number=p_account_number AND status='SUCCESS') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='This bank account number is already linked'; END IF;
+ IF EXISTS(SELECT 1 FROM bank_accounts WHERE wallet_id=p_wallet_id AND bank_id=p_bank_id AND status='SUCCESS') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='This wallet is already linked to this bank'; END IF;
+ INSERT INTO bank_accounts(wallet_id,bank_id,account_number,status) VALUES(p_wallet_id,p_bank_id,p_account_number,'SUCCESS');
+ SELECT bank_account_id,account_number FROM bank_accounts WHERE wallet_id=p_wallet_id AND bank_id=p_bank_id AND status='SUCCESS' ORDER BY bank_account_id DESC LIMIT 1;
 END$$
--- Links a wallet to a bank. status uses the table default (SUCCESS: the link is simulated).
--- The BEFORE INSERT trigger checks the wallet (exists, ACTIVE), the bank and duplicates.
-CREATE PROCEDURE sp_bank_account_link(IN p_wallet_id BIGINT UNSIGNED, IN p_bank_id BIGINT UNSIGNED)
+CREATE PROCEDURE sp_bank_account_unlink(IN p_user_id BIGINT UNSIGNED, IN p_bank_account_id BIGINT UNSIGNED)
 BEGIN
-  INSERT INTO bank_accounts(wallet_id,bank_id) VALUES(p_wallet_id,p_bank_id);
-  SELECT LAST_INSERT_ID() AS bank_account_id;
+ DECLARE v_wallet_id BIGINT UNSIGNED DEFAULT NULL;
+ DECLARE v_rows INT DEFAULT 0;
+ DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_wallet_id=NULL;
+ SELECT ba.wallet_id INTO v_wallet_id
+   FROM bank_accounts ba
+   INNER JOIN wallets w ON w.wallet_id=ba.wallet_id
+  WHERE ba.bank_account_id=p_bank_account_id
+    AND w.user_id=p_user_id
+    AND ba.status='SUCCESS'
+  LIMIT 1 FOR UPDATE;
+ IF v_wallet_id IS NULL THEN
+   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Active bank link not found';
+ END IF;
+ UPDATE bank_accounts SET status='CANCELLED'
+  WHERE bank_account_id=p_bank_account_id AND status='SUCCESS';
+ SET v_rows=ROW_COUNT();
+ SELECT v_rows AS affected_rows,v_wallet_id AS wallet_id;
 END$$
--- All links of the wallets owned by a user (joined with wallet and bank data).
+CREATE PROCEDURE sp_bank_account_has_active_link(IN p_wallet_id BIGINT UNSIGNED)
+BEGIN SELECT EXISTS(SELECT 1 FROM bank_accounts ba INNER JOIN banks b ON b.bank_id=ba.bank_id WHERE ba.wallet_id=p_wallet_id AND ba.status='SUCCESS' AND b.is_valid=TRUE) AS has_active_link; END$$
 CREATE PROCEDURE sp_bank_account_list_by_user(IN p_user_id BIGINT UNSIGNED)
 BEGIN
-  SELECT ba.bank_account_id,ba.wallet_id,w.currency,ba.bank_id,b.name AS bank_name,ba.status,ba.linked_at
-  FROM bank_accounts ba
-  INNER JOIN wallets w ON w.wallet_id=ba.wallet_id
-  INNER JOIN banks b ON b.bank_id=ba.bank_id
-  WHERE w.user_id=p_user_id
-  ORDER BY ba.linked_at DESC,ba.bank_account_id DESC;
+ SELECT ba.bank_account_id,ba.wallet_id,w.currency,ba.bank_id,b.name AS bank_name,ba.account_number,ba.status,ba.linked_at,b.is_valid
+ FROM bank_accounts ba INNER JOIN wallets w ON w.wallet_id=ba.wallet_id INNER JOIN banks b ON b.bank_id=ba.bank_id
+ WHERE w.user_id=p_user_id ORDER BY ba.linked_at DESC,ba.bank_account_id DESC;
 END$$
 CREATE PROCEDURE sp_bank_account_list_all(IN p_limit INT)
 BEGIN
-  SELECT ba.bank_account_id,ba.wallet_id,w.user_id,u.user_name,ba.bank_id,b.name AS bank_name,ba.status,ba.linked_at
-  FROM bank_accounts ba
-  INNER JOIN wallets w ON w.wallet_id=ba.wallet_id
-  INNER JOIN users u ON u.user_id=w.user_id
-  INNER JOIN banks b ON b.bank_id=ba.bank_id
-  ORDER BY ba.linked_at DESC,ba.bank_account_id DESC LIMIT p_limit;
+ SELECT ba.bank_account_id,ba.wallet_id,w.user_id,u.user_name,ba.bank_id,b.name AS bank_name,ba.account_number,ba.status,ba.linked_at,b.is_valid
+ FROM bank_accounts ba INNER JOIN wallets w ON w.wallet_id=ba.wallet_id INNER JOIN users u ON u.user_id=w.user_id INNER JOIN banks b ON b.bank_id=ba.bank_id
+ ORDER BY ba.linked_at DESC,ba.bank_account_id DESC LIMIT p_limit;
+END$$
+DELIMITER ;
+
+
+-- ==================== admin_procedures.sql ====================
+-- Restore the procedure delimiter after the preceding section.
+DELIMITER $$
+CREATE PROCEDURE sp_admin_list_users(IN p_limit INT)
+BEGIN
+  SELECT u.user_id,u.user_name,u.email,u.phone,
+         COUNT(w.wallet_id) AS wallet_count,
+         EXISTS(SELECT 1 FROM user_profiles p WHERE p.user_id=u.user_id) AS has_profile
+    FROM users u
+    LEFT JOIN wallets w ON w.user_id=u.user_id
+   GROUP BY u.user_id,u.user_name,u.email,u.phone
+   ORDER BY u.user_id
+   LIMIT p_limit;
 END$$
 DELIMITER ;
 
@@ -339,13 +371,13 @@ END$$
 -- (users and banks are related N:M through wallets and bank_accounts.)
 CREATE PROCEDURE sp_bank_statistics()
 BEGIN
-  SELECT b.bank_id,b.name AS bank_name,b.cooperated_at,
+  SELECT b.bank_id,b.name AS bank_name,b.cooperated_at,b.is_valid,
          COUNT(ba.bank_account_id)   AS linked_wallets,
          COUNT(DISTINCT w.user_id)   AS linked_users
   FROM banks b
-  LEFT JOIN bank_accounts ba ON ba.bank_id=b.bank_id AND ba.status='SUCCESS'
+  LEFT JOIN bank_accounts ba ON ba.bank_id=b.bank_id AND ba.status='SUCCESS' AND b.is_valid=TRUE
   LEFT JOIN wallets w ON w.wallet_id=ba.wallet_id
-  GROUP BY b.bank_id,b.name,b.cooperated_at
+  GROUP BY b.bank_id,b.name,b.cooperated_at,b.is_valid
   ORDER BY linked_wallets DESC,b.name;
 END$$
 
@@ -357,6 +389,8 @@ BEGIN
          (SELECT COUNT(*) FROM wallets)                                      AS wallets,
          (SELECT COUNT(*) FROM wallets WHERE status='LOCKED')                AS locked_wallets,
          (SELECT COUNT(*) FROM banks)                                        AS banks,
+         (SELECT COUNT(*) FROM banks WHERE is_valid=TRUE) AS active_banks,
+         (SELECT COUNT(*) FROM banks WHERE is_valid=FALSE) AS inactive_banks,
          (SELECT COUNT(*) FROM bank_accounts)                                AS bank_accounts,
          (SELECT COUNT(*) FROM transactions WHERE status='SUCCESS')          AS tx_success,
          (SELECT COUNT(*) FROM transactions WHERE status='FAIL')             AS tx_fail,
@@ -365,18 +399,5 @@ BEGIN
             AND receiver_id IN (SELECT wallet_id FROM wallets WHERE currency='VND'))  AS deposit_volume_vnd,
          (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE status='SUCCESS' AND type='DEPOSIT'
             AND receiver_id IN (SELECT wallet_id FROM wallets WHERE currency='USD'))  AS deposit_volume_usd;
-END$$
-DELIMITER ;
-
--- ==================== admin_procedures.sql ====================
-DROP PROCEDURE IF EXISTS sp_admin_list_users;
-DELIMITER $$
-CREATE PROCEDURE sp_admin_list_users(IN p_limit INT)
-BEGIN
-  SELECT u.user_id,u.user_name,u.email,u.phone,COUNT(w.wallet_id) AS wallet_count,
-         EXISTS(SELECT 1 FROM user_profiles p WHERE p.user_id=u.user_id) AS has_profile
-  FROM users u LEFT JOIN wallets w ON w.user_id=u.user_id
-  GROUP BY u.user_id,u.user_name,u.email,u.phone
-  ORDER BY u.user_id LIMIT p_limit;
 END$$
 DELIMITER ;

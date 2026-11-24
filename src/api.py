@@ -13,7 +13,7 @@ from src.config.database.connection import get_db_connection
 from src.container import build_controllers
 from src.common.errors import ServiceError
 
-app = FastAPI(title="E-Wallet REST API", version="1.3.0")
+app = FastAPI(title="E-Wallet REST API", version="1.4.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 @contextmanager
@@ -75,10 +75,11 @@ def run(operation, authorization=None, body=None):
             if operation == "activity": return c.audit.get_activity(uid, body.get("action"), body.get("limit", 100))
             if operation == "user_profile": return c.profiles.get_profile(uid) or {}
             if operation == "save_user_profile":
-                return c.profiles.save_profile(uid, body.get("age"), body.get("sex"), body.get("address"), body.get("job"), body.get("country"))
+                return c.profiles.save_profile(uid, body.get("date_of_birth"), body.get("sex"), body.get("address"), body.get("job"), body.get("country"))
             if operation == "banks": return c.banks.list_banks()
             if operation == "bank_accounts": return c.banks.list_my_links(uid)
-            if operation == "link_bank": return c.banks.link_wallet(uid, body.get("wallet_id"), body.get("bank_id"))
+            if operation == "link_bank": return c.banks.link_wallet(uid, body.get("wallet_id"), body.get("bank_id"), body.get("account_number"))
+            if operation == "unlink_bank": return c.banks.unlink_wallet(uid, body.get("bank_account_id"))
             if operation == "statistics": return c.statistics.my_statistics(uid, body.get("date_from"), body.get("date_to"))
             if operation == "admin_users": return a.list_users(uid)
             if operation == "admin_wallets": return a.list_wallets(uid, user_id=body.get("user_id"))
@@ -95,7 +96,7 @@ def run(operation, authorization=None, body=None):
             if operation == "admin_bank_accounts": return a.list_bank_accounts(uid)
             if operation == "admin_partner_banks": return a.list_partner_banks(uid)
             if operation == "admin_create_partner_bank": return a.create_partner_bank(uid, body.get("name"))
-            if operation == "admin_delete_partner_bank": return a.delete_partner_bank(uid, body.get("bank_id"))
+            if operation == "admin_set_partner_bank_valid": return a.set_partner_bank_valid(uid, body.get("bank_id"), body.get("is_valid"))
             if operation == "admin_bank_statistics": return a.bank_statistics(uid)
             if operation == "admin_system_statistics": return a.system_statistics(uid)
             # Composite read endpoints reduce Cloudflare round-trips on high-latency links.
@@ -123,7 +124,7 @@ def health():
         "capabilities": [
             "user_profile", "save_user_profile", "banks", "bank_accounts",
             "statistics", "admin_bank_accounts", "admin_partner_banks",
-            "admin_create_partner_bank", "admin_delete_partner_bank", "admin_bank_statistics",
+            "admin_create_partner_bank", "admin_set_partner_bank_valid", "unlink_bank", "admin_bank_statistics",
             "admin_system_statistics", "admin_transaction_detail", "admin_user_profiles",
             "dashboard_summary", "bank_page_data",
         ],

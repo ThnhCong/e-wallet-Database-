@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QDialog, QVBoxLayout, QFormLayout, QScrollArea, QWidget
 
 from GUI.pages.common import Page, add_table, make_button, make_combo, make_input
 
@@ -8,7 +8,7 @@ class AdminUserProfilePage(Page):
     """Paginated, filterable list of all optional user profile records."""
 
     def __init__(self, api, state, parent=None):
-        super().__init__("Customer profiles", "Browse personal profile records created by registered customers.", parent)
+        super().__init__("Customer profiles", "Browse customer profile records. Double-click a row to open the complete user and profile details.", parent)
         self.api, self.state = api, state
         self.page = 1
         self.total_pages = 0
@@ -45,11 +45,12 @@ class AdminUserProfilePage(Page):
 
         self.table = add_table(self, [
             ("Profile ID", "user_profile_id"), ("User ID", "user_id"),
-            ("Customer", "user_name"), ("Age", "age"),
+            ("Customer", "user_name"), ("Date of birth", "date_of_birth"), ("Age", "age"),
             ("Sex", "sex"), ("Address", "address"), ("Occupation", "job"), ("Country", "country"),
             ("Created", "created_at"),
         ])
 
+        self.table.set_detail_handler(self.open_selected_profile)
         self.empty_label = QLabel()
         self.empty_label.setObjectName("MutedLabel")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -138,3 +139,17 @@ class AdminUserProfilePage(Page):
         self.page_label.setText(f"Page {self.page} of {self.total_pages}" if self.total_pages else "Page 0 of 0")
         self.prev_button.setEnabled(self.page > 1 and self.total_pages > 0)
         self.next_button.setEnabled(self.page < self.total_pages)
+
+    def open_selected_profile(self, row, _column):
+        try: user_id=int(self.table.item(row,1).text())
+        except (AttributeError,TypeError,ValueError): self.show_error("The selected customer row is invalid."); return
+        self.run_api(self.api.admin_user_profile,self.state.user_id,user_id,on_success=self._show_full_profile)
+
+    def _show_full_profile(self,result):
+        result=result or {}; user=result.get("user") or {}; profile=result.get("profile") or {}
+        dialog=QDialog(self); dialog.setWindowTitle(f"Customer profile · User #{user.get('user_id','—')}"); dialog.resize(680,620)
+        outer=QVBoxLayout(dialog); scroll=QScrollArea(dialog); scroll.setWidgetResizable(True); content=QWidget(); form=QFormLayout(content)
+        def add_field(label,value):
+            item=QLabel("—" if value in (None,"") else str(value)); item.setWordWrap(True); item.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); form.addRow(label,item)
+        for label,value in [("User ID",user.get("user_id")),("Full name",user.get("user_name")),("Email",user.get("email")),("Phone",user.get("phone")),("Profile ID",profile.get("user_profile_id")),("Date of birth",profile.get("date_of_birth")),("Age",profile.get("age")),("Sex",profile.get("sex")),("Address",profile.get("address")),("Occupation",profile.get("job")),("Country",profile.get("country")),("Profile created",profile.get("created_at"))]: add_field(label,value)
+        scroll.setWidget(content); outer.addWidget(scroll); outer.addWidget(make_button("Close",dialog.accept,"SecondaryButton")); dialog.exec()

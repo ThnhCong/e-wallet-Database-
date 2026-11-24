@@ -7,7 +7,7 @@ class DepositPage(Page):
     tx_type = "deposit"
 
     def __init__(self, api, state, parent=None):
-        super().__init__("Deposit", "Deposits are simulated and have no weekly limit.", parent)
+        super().__init__("Deposit", "Deposits are simulated and have no weekly limit. Link an active partner bank to this wallet first.", parent)
         self.api, self.state = api, state
         self.wallet = make_combo([])
         self.amount = AmountInput()

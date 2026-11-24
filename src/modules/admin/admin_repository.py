@@ -5,5 +5,8 @@ class AdminRepository(BaseRepository):
         rows = self.call("sp_user_get_by_id", (user_id,))
         return bool(rows and str(rows[0].get("phone", "")) in admin_accounts)
 
+    def get_user(self, user_id):
+        rows=self.call("sp_user_get_by_id", (user_id,)); return rows[0] if rows else None
+
     def list_users(self, limit=50):
         return self.call("sp_admin_list_users", (limit,))

@@ -43,8 +43,8 @@ class AdminController:
     def create_partner_bank(self, admin_id, name):
         return self.admin_service.create_partner_bank(admin_id, name)
 
-    def delete_partner_bank(self, admin_id, bank_id):
-        return self.admin_service.delete_partner_bank(admin_id, bank_id)
+    def set_partner_bank_valid(self, admin_id, bank_id, is_valid):
+        return self.admin_service.set_partner_bank_valid(admin_id, bank_id, is_valid)
 
     def bank_statistics(self, admin_id):
         return self.admin_service.bank_statistics(admin_id)

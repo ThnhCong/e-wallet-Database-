@@ -94,6 +94,18 @@ def validate_age(value):
     return age
 
 
+def validate_date_of_birth(value):
+    if hasattr(value, "isoformat"): dob=value
+    else:
+        try: dob=date.fromisoformat(str(value or "").strip())
+        except ValueError: raise ServiceError("DATE_OF_BIRTH_INVALID", "Date of birth must use YYYY-MM-DD format.") from None
+    today=date.today()
+    if dob>=today: raise ServiceError("DATE_OF_BIRTH_INVALID", "Date of birth must be earlier than today.")
+    age=today.year-dob.year-((today.month,today.day)<(dob.month,dob.day))
+    if not 1<=age<=120: raise ServiceError("DATE_OF_BIRTH_INVALID", "Date of birth must represent an age between 1 and 120.")
+    return dob,age
+
+
 def parse_sex(value):
     v = (value or "").strip().upper()
     if v not in SEXES:

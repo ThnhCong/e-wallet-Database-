@@ -16,6 +16,7 @@ class AuditAction:
     TRANSFER = "TRANSFER"
     TRANSFER_RECEIVED = "TRANSFER_RECEIVED"
     LINK_BANK = "LINK_BANK"
+    UNLINK_BANK = "UNLINK_BANK"
 
 
 # action -> (co wallet_id?, co transaction_id?)   True = phai co, False = phai NULL
@@ -33,6 +34,7 @@ AUDIT_REFERENCES = {
     AuditAction.TRANSFER:          (True, True),
     AuditAction.TRANSFER_RECEIVED: (True, True),
     AuditAction.LINK_BANK:         (True, False),
+    AuditAction.UNLINK_BANK:       (True, False),
 }
 
 AUDIT_ACTIONS = tuple(AUDIT_REFERENCES)

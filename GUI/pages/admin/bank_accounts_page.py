@@ -10,7 +10,7 @@ class AdminBankAccountsPage(Page):
         self.table = add_table(self, [
             ("Link ID", "bank_account_id"), ("Wallet", "wallet_id"), ("User ID", "user_id"),
             ("Customer", "user_name"), ("Bank", "bank_name"), ("Bank ID", "bank_id"),
-            ("Status", "status"), ("Connected", lambda r: short_time(r.get("linked_at"))),
+            ("Account number", "account_number"), ("Status", "status"), ("Partner active", "is_valid"), ("Connected", lambda r: short_time(r.get("linked_at"))),
         ])
 
     def refresh(self):

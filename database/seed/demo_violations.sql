@@ -33,16 +33,16 @@ DELETE FROM audit_logs WHERE audit_log_id = 1;
 -- 12. Unsupported currency                         -> Unsupported currency
 INSERT INTO wallets(user_id, currency) VALUES (2, 'EUR');
 -- 13. Second profile for the same user (1:1)       -> Duplicate entry ... uq_user_profiles_user_id
-INSERT INTO user_profiles(user_id, age, sex, address, job, country) VALUES (2, 30, 'MALE', 'x', 'y', 'z');
+INSERT INTO user_profiles(user_id, date_of_birth, age, sex, address, job, country) VALUES (2, '1996-01-01', 30, 'MALE', 'x', 'y', 'z');
 -- 14. Invalid age                                  -> chk_user_profiles_age
-INSERT INTO user_profiles(user_id, age, sex, address, job, country) VALUES (4, 200, 'MALE', 'x', 'y', 'z');
+INSERT INTO user_profiles(user_id, date_of_birth, age, sex, address, job, country) VALUES (4, '1826-01-01', 200, 'MALE', 'x', 'y', 'z');
 -- 15. Link the same wallet to the same bank twice  -> Wallet is already linked to this bank
-INSERT INTO bank_accounts(wallet_id, bank_id) VALUES (1, 1);
+INSERT INTO bank_accounts(wallet_id, bank_id, account_number) VALUES (1, 1, '099999999901');
 -- 16. Link a LOCKED wallet                         -> Wallet is locked
 UPDATE wallets SET status = 'LOCKED' WHERE wallet_id = 5;
-INSERT INTO bank_accounts(wallet_id, bank_id) VALUES (5, 1);
+INSERT INTO bank_accounts(wallet_id, bank_id, account_number) VALUES (5, 1, '099999999902');
 UPDATE wallets SET status = 'ACTIVE' WHERE wallet_id = 5;
 -- 17. Link to a bank that does not exist           -> Bank does not exist
-INSERT INTO bank_accounts(wallet_id, bank_id) VALUES (4, 999);
+INSERT INTO bank_accounts(wallet_id, bank_id, account_number) VALUES (4, 999, '099999999903');
 -- 18. Delete a bank that has links                 -> foreign key (RESTRICT)
 DELETE FROM banks WHERE bank_id = 1;

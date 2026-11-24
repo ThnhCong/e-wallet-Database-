@@ -6,5 +6,5 @@ class UserProfileController:
     def get_profile(self, user_id):
         return self.profile_service.get_profile(user_id)
 
-    def save_profile(self, user_id, age, sex, address, job, country):
-        return self.profile_service.save_profile(user_id, age, sex, address, job, country)
+    def save_profile(self, user_id, date_of_birth, sex, address, job, country):
+        return self.profile_service.save_profile(user_id, date_of_birth, sex, address, job, country)

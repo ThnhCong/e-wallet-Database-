@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS banks (
     bank_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL,
     cooperated_at DATE NOT NULL DEFAULT (CURRENT_DATE),
+    is_valid BOOLEAN NOT NULL DEFAULT TRUE,
 
     PRIMARY KEY (bank_id),
     CONSTRAINT uq_banks_name UNIQUE (name)

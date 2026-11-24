@@ -8,25 +8,25 @@ ALTER DATABASE ewallet CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 ALTER TABLE users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 ALTER TABLE user_profiles CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
--- ==================== user_profile_procedures.sql ====================
 DROP PROCEDURE IF EXISTS sp_user_profile_get;
 DROP PROCEDURE IF EXISTS sp_user_profile_save;
 DROP PROCEDURE IF EXISTS sp_admin_list_user_profiles;
 DELIMITER $$
 CREATE PROCEDURE sp_user_profile_get(IN p_user_id BIGINT UNSIGNED)
 BEGIN
-  SELECT user_profile_id,user_id,age,sex,address,job,country,created_at
+  SELECT user_profile_id,user_id,date_of_birth,age,sex,address,job,country,created_at
   FROM user_profiles WHERE user_id=p_user_id LIMIT 1;
 END$$
-CREATE PROCEDURE sp_user_profile_save(IN p_user_id BIGINT UNSIGNED, IN p_age TINYINT UNSIGNED, IN p_sex VARCHAR(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
+CREATE PROCEDURE sp_user_profile_save(IN p_user_id BIGINT UNSIGNED, IN p_date_of_birth DATE, IN p_age TINYINT UNSIGNED, IN p_sex VARCHAR(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
                                       IN p_address VARCHAR(255), IN p_job VARCHAR(100), IN p_country VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci)
 BEGIN
   DECLARE v_rows INT DEFAULT 0;
   -- created_at is set only when the profile is first inserted.
   -- On duplicate key (profile already exists), it is deliberately preserved.
-  INSERT INTO user_profiles(user_id,age,sex,address,job,country,created_at)
-  VALUES(p_user_id,p_age,p_sex,p_address,p_job,p_country,CURRENT_TIMESTAMP)
+  INSERT INTO user_profiles(user_id,date_of_birth,age,sex,address,job,country,created_at)
+  VALUES(p_user_id,p_date_of_birth,p_age,p_sex,p_address,p_job,p_country,CURRENT_TIMESTAMP)
   ON DUPLICATE KEY UPDATE
+      date_of_birth=VALUES(date_of_birth),
       age=VALUES(age),
       sex=VALUES(sex),
       address=VALUES(address),
@@ -49,6 +49,7 @@ BEGIN
            page_rows.user_name,
            page_rows.email,
            page_rows.phone,
+           page_rows.date_of_birth,
            page_rows.age,
            page_rows.sex,
            page_rows.address,
@@ -72,7 +73,7 @@ BEGIN
     ) AS totals
     LEFT JOIN (
         SELECT p.user_profile_id, p.user_id, u.user_name, u.email, u.phone,
-               p.age, p.sex, p.address, p.job, p.country, p.created_at
+               p.date_of_birth, p.age, p.sex, p.address, p.job, p.country, p.created_at
         FROM user_profiles p
         INNER JOIN users u ON u.user_id = p.user_id
         WHERE (p_search IS NULL
